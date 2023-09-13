@@ -44,7 +44,7 @@ jobs:
         uses: actions/checkout@v3
         with:
           fetch-depth: 20
-      - name: Set up system dependences on MacOS
+      - name: Set up system dependencies on MacOS
         if: ${{ env.OS_NAME == 'MacOS' }}
         shell: bash
         run: |
@@ -66,7 +66,8 @@ jobs:
           pip install git+http://github.com/opendilab/DI-engine.git@main#egg=DI-engine[common_env]
           pip install transformers
       - name: Install libgl1-mesa-glx on Linux
-        if: runner.os == 'Linux'
+        if: ${{ runner.os == 'Linux' }}
+        shell: bash
         run: |
           sudo apt-get install -y libgl1-mesa-glx
       - name: Run unittest on MacOS or Linux
