@@ -65,6 +65,7 @@ jobs:
           pip uninstall DI-engine -y
           pip install git+http://github.com/opendilab/DI-engine.git@main#egg=DI-engine[common_env]
           pip install transformers
+          sudo apt-get install -y libgl1-mesa-glx
       - name: Run unittest on MacOS or Linux
         if: ${{ env.OS_NAME == 'MacOS' || env.OS_NAME == 'Linux'}}
         env:
