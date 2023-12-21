@@ -5,8 +5,9 @@ import matplotlib.pyplot as plt
 # 假设batch是一个字典，其中包含了observations键，
 # 并且它的形状是torch.Size([B, N, C, H, W])
 # batch_observations = batch_for_gpt['observations']
+batch_observations = predict_rec_obs.unsqueeze(0)
 # batch_observations = batch['observations']
-batch_observations = obs.unsqueeze(0)
+# batch_observations = obs.unsqueeze(0)
 # batch_observations = rec_img.unsqueeze(0)
 
 # batch_observations = observations.unsqueeze(0)

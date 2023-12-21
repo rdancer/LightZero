@@ -50,7 +50,7 @@ class WorldModel(nn.Module):
         self.action_shape = config.action_shape
         self.max_cache_size = config.max_cache_size
         self.env_num = config.env_num
-
+        self.policy_value_head_type = self.config.policy_value_head_type  # 'policy_value_rec_x' or 'policy_rec_x'
 
         all_but_last_obs_tokens_pattern = torch.ones(config.tokens_per_block)
         all_but_last_obs_tokens_pattern[-2] = 0 # 1,...,0,1
@@ -113,28 +113,58 @@ class WorldModel(nn.Module):
                 nn.Linear(config.embed_dim, obs_vocab_size)
             )
         )
-        self.head_policy = Head(
-            max_blocks=config.max_blocks,
-            block_mask=value_policy_tokens_pattern,  # TODO: value_policy_tokens_pattern # [0,...,1,0]
-            head_module=nn.Sequential( # （8, 5, 128）
-                # nn.BatchNorm1d(config.embed_dim), # TODO: 1
-                nn.Linear(config.embed_dim, config.embed_dim),
-                # nn.ReLU(),
-                nn.LeakyReLU(negative_slope=0.01), # TODO: 2
-                nn.Linear(config.embed_dim, self.action_shape)  # TODO(pu); action shape
+        # self.head_policy = Head(
+        #     max_blocks=config.max_blocks,
+        #     block_mask=value_policy_tokens_pattern,  # TODO: value_policy_tokens_pattern # [0,...,1,0]
+        #     head_module=nn.Sequential( # （8, 5, 128）
+        #         # nn.BatchNorm1d(config.embed_dim), # TODO: 1
+        #         nn.Linear(config.embed_dim, config.embed_dim),
+        #         # nn.ReLU(),
+        #         nn.LeakyReLU(negative_slope=0.01), # TODO: 2
+        #         nn.Linear(config.embed_dim, self.action_shape)  # TODO(pu); action shape
+        #     )
+        # )
+
+
+        if self.policy_value_head_type == 'policy_value_rec_x':
+            from .policy_value_head_model import  PolicyValueHead
+            self.head_policy_value =  PolicyValueHead(obs_shape=[3, 64, 64],
+                action_shape=self.action_shape,
+                encoder_hidden_size_list = [128, 128, 64],
+                dueling = False,
+                head_hidden_size = None,
+                head_layer_num = 1,
+                activation = nn.ReLU(),
+                norm_type = None,
+                dropout = None
             )
-        )
-        self.head_value = Head(
-            max_blocks=config.max_blocks,
-            block_mask=value_policy_tokens_pattern,
-            head_module=nn.Sequential(
-                # nn.BatchNorm1d(config.embed_dim), # TODO: 1
-                nn.Linear(config.embed_dim, config.embed_dim),
-                nn.ReLU(),
-                # nn.LeakyReLU(negative_slope=0.01), # TODO: 2
-                nn.Linear(config.embed_dim, self.support_size)  # TODO(pu): action shape
+        elif self.policy_value_head_type == 'policy_rec_x':
+            self.head_value = Head(
+                max_blocks=config.max_blocks,
+                block_mask=value_policy_tokens_pattern,
+                head_module=nn.Sequential(
+                    # nn.BatchNorm1d(config.embed_dim), # TODO: 1
+                    nn.Linear(config.embed_dim, config.embed_dim),
+                    nn.ReLU(),
+                    # nn.LeakyReLU(negative_slope=0.01), # TODO: 2
+                    nn.Linear(config.embed_dim, self.support_size)  # TODO(pu): action shape
+                )
             )
-        )
+            from .policy_head_model import PolicyHead
+            self.head_policy =  PolicyHead(obs_shape=[3, 64, 64],
+                action_shape=self.action_shape,
+                encoder_hidden_size_list = [128, 128, 64],
+                dueling = False,
+                head_hidden_size = None,
+                head_layer_num = 1,
+                activation = nn.ReLU(),
+                norm_type = None,
+                dropout = None
+            )
+        else:
+            print('error')
+            import sys
+            sys.exit(-1)
 
         self.apply(init_weights)
 
@@ -143,15 +173,16 @@ class WorldModel(nn.Module):
             # TODO: policy init : 3
             # Locate the last linear layer and initialize its weights and biases to 0.
             # for _, layer in enumerate(reversed(self.head_policy.head_module)):
-            #     if isinstance(layer, nn.Linear):
-            #         nn.init.zeros_(layer.weight)
-            #         nn.init.zeros_(layer.bias)
-            #         break
-            for _, layer in enumerate(reversed(self.head_value.head_module)):
-                if isinstance(layer, nn.Linear):
-                    nn.init.zeros_(layer.weight)
-                    nn.init.zeros_(layer.bias)
-                    break
+                # if isinstance(layer, nn.Linear):
+                #     nn.init.zeros_(layer.weight)
+                #     nn.init.zeros_(layer.bias)
+                #     break
+            if self.policy_value_head_type == 'policy_rec_x':
+                for _, layer in enumerate(reversed(self.head_value.head_module)):
+                    if isinstance(layer, nn.Linear):
+                        nn.init.zeros_(layer.weight)
+                        nn.init.zeros_(layer.bias)
+                        break
             for _, layer in enumerate(reversed(self.head_rewards.head_module)):
                 if isinstance(layer, nn.Linear):
                     nn.init.zeros_(layer.weight)
@@ -196,9 +227,71 @@ class WorldModel(nn.Module):
         logits_rewards = self.head_rewards(x, num_steps=num_steps, prev_steps=prev_steps)
         logits_ends = self.head_ends(x, num_steps=num_steps, prev_steps=prev_steps)
         # return WorldModelOutput(x, logits_observations, logits_rewards, logits_ends)
+        # logits_policy = self.head_policy(x, num_steps=num_steps, prev_steps=prev_steps)
 
-        logits_policy = self.head_policy(x, num_steps=num_steps, prev_steps=prev_steps)
-        logits_value = self.head_value(x, num_steps=num_steps, prev_steps=prev_steps)
+        if self.policy_value_head_type == 'policy_rec_x':
+            if num_steps == 16:
+                # x.shape = (B, N, D) (8, 16, 128) obs_token
+                # tokens.shape = (B, N) (8, 16)
+                logits_policy = None
+            elif num_steps % 17 ==0:
+                # x.shape = (B, N, D) (32, 17*5, 128)
+                # tokens.shape = (B, N) (32, 17*5)
+                # 假设tokens已经按照你的描述计算好了
+                # tokens.shape = (B, N), 例如 (32, 17*5)
+                B, N = tokens.shape
+                # 计算L，即重复(观察值+动作)的次数
+                L = N // 17  # 因为每个样本是 16+1，所以总长度应该是17的倍数
+                # 首先将tokens变形为(B, L, 17)
+                tokens_reshaped = tokens.view(B, L, 17)
+                # 然后取出每组17个中的前16个, (B, L, 16)
+                obs_tokens = tokens_reshaped[:, :, :16]
+                # 最后将obs_tokens的形状转换为(B,L,16)
+                obs_tokens = obs_tokens.contiguous().view(B*L,16)
+                # 验证形状
+                # assert obs_tokens.shape == (B*L,16), "obs_tokens does not have the expected shape"
+
+                # obs_tokens现在是你所需要的形状 (32*L, 16) predict_rec_obs.shape: (32*L, C,H,W)
+                predict_rec_obs = self.decode_obs_tokens_batch(obs_tokens)
+                logits_policy = self.head_policy(predict_rec_obs) # (32*L, C,H,W) -> (32*L, A)
+                logits_policy = logits_policy.view(B, -1 ,self.action_shape) # (32*L, C,H,W) -> (32*L, A)
+            else:
+                # num_steps == 1, act_token
+                logits_policy = None
+            logits_value = self.head_value(x, num_steps=num_steps, prev_steps=prev_steps)
+        elif self.policy_value_head_type == 'policy_value_rec_x':
+            if num_steps == 16:
+                # x.shape = (B, N, D) (8, 16, 128) obs_token
+                # tokens.shape = (B, N) (8, 16)
+                logits_policy = None
+                logits_value = None
+            elif num_steps % 17 ==0:
+                # x.shape = (B, N, D) (32, 17*5, 128)
+                # tokens.shape = (B, N) (32, 17*5)
+                # 假设tokens已经按照你的描述计算好了
+                # tokens.shape = (B, N), 例如 (32, 17*5)
+                B, N = tokens.shape
+                # 计算L，即重复(观察值+动作)的次数
+                L = N // 17  # 因为每个样本是 16+1，所以总长度应该是17的倍数
+                # 首先将tokens变形为(B, L, 17)
+                tokens_reshaped = tokens.view(B, L, 17)
+                # 然后取出每组17个中的前16个, (B, L, 16)
+                obs_tokens = tokens_reshaped[:, :, :16]
+                # 最后将obs_tokens的形状转换为(B,L,16)
+                obs_tokens = obs_tokens.contiguous().view(B*L,16)
+                # 验证形状
+                # assert obs_tokens.shape == (B*L,16), "obs_tokens does not have the expected shape"
+
+                # obs_tokens现在是你所需要的形状 (32*L, 16) predict_rec_obs.shape: (32*L, C,H,W)
+                predict_rec_obs = self.decode_obs_tokens_batch(obs_tokens)
+                logits_policy, logits_value = self.head_policy_value(predict_rec_obs) # (32*L, C,H,W) -> (32*L, A)
+                logits_policy = logits_policy.view(B, -1 ,self.action_shape) # (32*L, A) -> (32,L, A)
+                logits_value = logits_value.view(B, -1 ,self.support_size) #  (32*L, 21)
+            else:
+                # num_steps == 1, act_token
+                logits_policy = None
+                logits_value = None
+
 
         # TODO: root reward value
         return WorldModelOutput(x, logits_observations, logits_rewards, logits_ends, logits_policy, logits_value)
@@ -220,6 +313,13 @@ class WorldModel(nn.Module):
         # for cartpole obs
         # return rec
 
+    @torch.no_grad()
+    def decode_obs_tokens_batch(self, obs_tokens) -> List[Image.Image]:
+        embedded_tokens = self.tokenizer.embedding(obs_tokens)  # (B*L, K, E)
+        z = rearrange(embedded_tokens, 'b (h w) e -> b e h w', h=int(np.sqrt(self.num_observations_tokens)))
+        rec = self.tokenizer.decode(z, should_postprocess=True)  # (B*L, C, H, W)
+        # TODO: for atari image
+        return torch.clamp(rec, 0, 1)
 
     @torch.no_grad()
     def render(self):
@@ -253,7 +353,7 @@ class WorldModel(nn.Module):
         self.obs_tokens = obs_tokens
 
         # return outputs_wm, self.decode_obs_tokens(), self.obs_tokens
-        return outputs_wm, _, self.obs_tokens
+        return outputs_wm, self.obs_tokens
 
 
     @torch.no_grad()
@@ -365,7 +465,13 @@ class WorldModel(nn.Module):
             # obs = repeated_observations.view(*desired_shape)  # 重新调整形状到3,64,64
             
 
-        outputs_wm, _, obs_tokens = self.reset_from_initial_observations(obs_act_dict)
+        outputs_wm, obs_tokens = self.reset_from_initial_observations(obs_act_dict)
+        predict_rec_obs = self.decode_obs_tokens()
+        if self.policy_value_head_type == 'policy_rec_x':
+            logits_policy = self.head_policy(predict_rec_obs)
+            logits_value = outputs_wm.logits_value
+        elif self.policy_value_head_type == 'policy_value_rec_x':
+            logits_policy, logits_value = self.head_policy_value(predict_rec_obs)
 
         if self.keys_values_wm.size > 0:
             # Depending on the shape of obs_tokens, create a cache key and store a deep copy of keys_values_wm
@@ -384,7 +490,7 @@ class WorldModel(nn.Module):
                 self.past_keys_values_cache[cache_key] = copy.deepcopy(self.keys_values_wm)
 
         # return outputs_wm.output_sequence, outputs_wm.logits_observations, outputs_wm.logits_rewards, outputs_wm.logits_policy, outputs_wm.logits_value
-        return outputs_wm.output_sequence, obs_tokens, outputs_wm.logits_rewards, outputs_wm.logits_policy, outputs_wm.logits_value
+        return outputs_wm.output_sequence, obs_tokens, outputs_wm.logits_rewards, logits_policy, logits_value
 
 
     """
@@ -494,7 +600,12 @@ class WorldModel(nn.Module):
         del self.obs_tokens
         self.obs_tokens = torch.cat(obs_tokens, dim=1)  # (B, K)
 
-        # obs = self.decode_obs_tokens() if should_predict_next_obs else None
+        predict_rec_obs = self.decode_obs_tokens()
+        if self.policy_value_head_type == 'policy_rec_x':
+            logits_policy = self.head_policy(predict_rec_obs)
+            logits_value = outputs_wm.logits_value
+        elif self.policy_value_head_type == 'policy_value_rec_x':
+            logits_policy, logits_value = self.head_policy_value(predict_rec_obs)
 
         # cache_key = hash(self.obs_tokens.detach().cpu().numpy().astype('int'))
         cache_key = hash(self.obs_tokens.detach().cpu().numpy())
@@ -505,7 +616,9 @@ class WorldModel(nn.Module):
             # TODO: lru_cache
             self.past_keys_values_cache.popitem(last=False)  # Removes the earliest inserted item
 
-        return outputs_wm.output_sequence, self.obs_tokens, reward, outputs_wm.logits_policy, outputs_wm.logits_value
+        # return outputs_wm.output_sequence, self.obs_tokens, reward, outputs_wm.logits_policy, outputs_wm.logits_value
+        return outputs_wm.output_sequence, self.obs_tokens, reward, logits_policy, logits_value
+
 
 
     def compute_loss(self, batch, tokenizer: Tokenizer, **kwargs: Any) -> LossWithIntermediateLosses:

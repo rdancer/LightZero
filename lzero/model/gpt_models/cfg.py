@@ -96,7 +96,7 @@ cfg['world_model'] = {
                       'embed_pdrop': 0.1,
                       'resid_pdrop': 0.1,
                       'attn_pdrop': 0.1,
-                      "device": 'cuda:0',
+                      "device": 'cuda:2',
                     #   "device": 'cpu',
                       # 'support_size': 601,
                       'support_size': 21,
@@ -105,6 +105,7 @@ cfg['world_model'] = {
                       'max_cache_size':1000,
                       # 'max_cache_size':5000,
                       "env_num":8,
+                      'policy_value_head_type': 'policy_value_rec_x',
                       }
 from easydict import EasyDict
 cfg = EasyDict(cfg)

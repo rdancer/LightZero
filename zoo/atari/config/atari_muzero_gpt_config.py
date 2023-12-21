@@ -1,6 +1,6 @@
 from easydict import EasyDict
 import torch
-torch.cuda.set_device(4)
+torch.cuda.set_device(2)
 
 # options={'PongNoFrameskip-v4', 'QbertNoFrameskip-v4', 'MsPacmanNoFrameskip-v4', 'SpaceInvadersNoFrameskip-v4', 'BreakoutNoFrameskip-v4', ...}
 env_name = 'PongNoFrameskip-v4'
@@ -23,24 +23,15 @@ collector_env_num = 8
 n_episode = 8
 evaluator_env_num = 1
 update_per_collect = 1000
-
-# update_per_collect = None
-# model_update_ratio = 0.25
 model_update_ratio = 0.25
-
 num_simulations = 50
 # num_simulations = 25
-
 max_env_step = int(1e6)
 reanalyze_ratio = 0
 
 batch_size = 32 # for num_head=2, emmbding_dim=128
 # batch_size = 8  # for num_head=4, emmbding_dim=256
-
 num_unroll_steps = 5
-
-# batch_size = 8
-# num_unroll_steps =10
 
 # for debug
 # collector_env_num = 8
@@ -64,8 +55,9 @@ eps_greedy_exploration_in_collect = False
 atari_muzero_config = dict(
     # TODO: world_model.py decode_obs_tokens
     # TODO: tokenizer.py: lpips loss
-    exp_name=f'data_mz_gpt_ctree_1220/{env_name[:-14]}_muzero_gpt_ns{num_simulations}_upc{update_per_collect}-mur{model_update_ratio}_rr{reanalyze_ratio}_H{num_unroll_steps}_orignet_tran-nlayers2-emd128-nh2_batch8_bs{batch_size}_tok1e-4-tra3e-3_tokenizer-joint-train-30kfixed-upcr1_eps-false-ftemp50k_mcs1000_policy-leakyrelu_seed0',
+    exp_name=f'data_mz_gpt_ctree_1220/{env_name[:-14]}_muzero_gpt_ns{num_simulations}_upc{update_per_collect}-mur{model_update_ratio}_rr{reanalyze_ratio}_H{num_unroll_steps}_orignet_tran-nlayers2-emd128-nh2_batch8_bs{batch_size}_tok1e-4-tra3e-3_tokenizer-joint-train-upcr1_eps-false-ftemp50k_mcs1000_policy-value-rec-x_seed0',
 
+    # exp_name=f'data_mz_gpt_ctree_1220/{env_name[:-14]}_muzero_gpt_ns{num_simulations}_upc{update_per_collect}-mur{model_update_ratio}_rr{reanalyze_ratio}_H{num_unroll_steps}_orignet_tran-nlayers2-emd128-nh2_batch8_bs{batch_size}_tok1e-4-tra3e-3_tokenizer-joint-train-30kfixed-upcr1_eps-false-ftemp50k_mcs1000_policy-leakyrelu_seed0',
     # exp_name=f'data_mz_gpt_ctree_1220/{env_name[:-14]}_muzero_gpt_ns{num_simulations}_upc{update_per_collect}-mur{model_update_ratio}_rr{reanalyze_ratio}_H{num_unroll_steps}_orignet_tran-nlayers2-emd128-nh2_batch8_bs{batch_size}_tok1e-4-tra3e-3_tokenizer-joint-train-delay%3-upcr1_eps-false-ftemp50k_mcs1000_policy-leakyrelu_seed0',
 
     # exp_name=f'data_mz_gpt_ctree_1219/{env_name[:-14]}_muzero_gpt_ns{num_simulations}_upc{update_per_collect}-mur{model_update_ratio}_rr{reanalyze_ratio}_H{num_unroll_steps}_orignet_tran-nlayers2-emd64-nh2_batch8_bs{batch_size}_lr1e-4-3e-3_tokenizer-wd0_tokenizer-0.5upc-joint-train_obsw2_eps50k_multistep_initinfer-targetv-unroll{num_unroll_steps}_mcs500_seed0',
