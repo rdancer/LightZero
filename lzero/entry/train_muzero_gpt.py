@@ -174,8 +174,8 @@ def train_muzero_gpt(
 
         # if collect_cnt % 3 == 0:
         # if collect_cnt % 1 == 0:
-        # if learner.train_iter <=  int(3e4) :  # 30K fixed
-        if learner.train_iter <=  int(9e9) :  # 30K fixed
+        if learner.train_iter <=  int(1e5) :  # 100K fixed
+        # if learner.train_iter <=  int(9e9) :  # 30K fixed
             # TODO: 0, 2, 4 更新
             replay_buffer._cfg.num_unroll_steps = 1
             batch_size = 256

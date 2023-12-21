@@ -136,7 +136,8 @@ class WorldModel(nn.Module):
                 head_layer_num = 1,
                 activation = nn.ReLU(),
                 norm_type = None,
-                dropout = None
+                dropout = None,
+                support_size=self.support_size,
             )
         elif self.policy_value_head_type == 'policy_rec_x':
             self.head_value = Head(
