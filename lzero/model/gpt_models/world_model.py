@@ -104,8 +104,9 @@ class WorldModel(nn.Module):
             head_module=nn.Sequential(
                 nn.Linear(config.embed_dim, config.embed_dim),
                 # nn.BatchNorm1d(config.embed_dim),
-                nn.ReLU(),
+                # nn.ReLU(),
                 # nn.Linear(config.embed_dim, obs_vocab_size)
+                nn.LeakyReLU(negative_slope=0.01), # TODO: 2
                 nn.Linear(config.embed_dim, self.obs_per_embdding_dim)
             )
         )
@@ -185,6 +186,12 @@ class WorldModel(nn.Module):
                     nn.init.zeros_(layer.weight)
                     nn.init.zeros_(layer.bias)
                     break
+            for _, layer in enumerate(reversed(self.head_observations.head_module)):
+                if isinstance(layer, nn.Linear):
+                    nn.init.zeros_(layer.weight)
+                    nn.init.zeros_(layer.bias)
+                    break
+
 
         import collections
         self.past_keys_values_cache = collections.OrderedDict()
@@ -195,8 +202,8 @@ class WorldModel(nn.Module):
         if self.num_observations_tokens==16:  # k=16
             self.projection_input_dim = 128
         elif self.num_observations_tokens==1:  # K=1
-            # self.projection_input_dim = 1024 # for atari #TODO
-            self.projection_input_dim = 256 # for cartpole
+            self.projection_input_dim = 1024 # for atari #TODO
+            # self.projection_input_dim = 256 # for cartpole
 
 
         self.proj_hid = 1024
