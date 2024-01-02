@@ -105,6 +105,16 @@ class MuZeroModelGPT(nn.Module):
             observation_shape=observation_shape, hidden_channels=self.latent_state_dim, norm_type=norm_type
         )
 
+        self.prediction_network = PredictionNetworkMLP(
+            action_space_size=action_space_size,
+            num_channels=latent_state_dim,
+            fc_value_layers=fc_value_layers,
+            fc_policy_layers=fc_policy_layers,
+            output_support_size=self.value_support_size,
+            last_linear_layer_init_zero=self.last_linear_layer_init_zero,
+            norm_type=norm_type
+        )
+
         # self.dynamics_network = DynamicsNetwork(
         #     action_encoding_dim=self.action_encoding_dim,
         #     num_channels=self.latent_state_dim + self.action_encoding_dim,
@@ -126,7 +136,7 @@ class MuZeroModelGPT(nn.Module):
         Decoder = Decoder(cfg.tokenizer.decoder)
         self.tokenizer = Tokenizer(cfg.tokenizer.vocab_size, cfg.tokenizer.embed_dim, Encoder, Decoder, with_lpips=True, representation_network=self.representation_network)
         self.world_model = WorldModel(obs_vocab_size=self.tokenizer.vocab_size, act_vocab_size=self.action_space_size,
-                                      config=cfg.world_model, tokenizer=self.tokenizer)
+                                      config=cfg.world_model, tokenizer=self.tokenizer, prediction_network=self.prediction_network)
         print(f'{sum(p.numel() for p in self.tokenizer.parameters())} parameters in agent.tokenizer')
         print(f'{sum(p.numel() for p in self.world_model.parameters())} parameters in agent.world_model')
 
@@ -223,11 +233,14 @@ class MuZeroModelGPT(nn.Module):
         # torch.Size([8, 16, 512]) -> torch.Size([8, 16])
         latent_state = obs_token
 
+        policy_logits, value = self.prediction_network(latent_state.squeeze(1))
+
+
         # TODO: root value policy_logit 
         # torch.Size([8, 1, 2]) - > torch.Size([8, 2])
-        policy_logits = policy_logits.squeeze(1)
-        # torch.Size([8, 1, 601]) - > torch.Size([8, 601])
-        value = value.squeeze(1)
+        # policy_logits = policy_logits.squeeze(1)
+        # # torch.Size([8, 1, 601]) - > torch.Size([8, 601])
+        # value = value.squeeze(1)
 
         return MZNetworkOutput(
             value,
@@ -272,10 +285,13 @@ class MuZeroModelGPT(nn.Module):
         # torch.Size([8, 16])
         next_latent_state = logits_observations
 
+        policy_logits, value = self.prediction_network(next_latent_state.squeeze(1))
+
+
         # torch.Size([8, 1, 2]) - > torch.Size([8, 2])
-        policy_logits = policy_logits.squeeze(1)
-        # torch.Size([8, 1, 601]) - > torch.Size([8, 601])
-        value = value.squeeze(1)
+        # policy_logits = policy_logits.squeeze(1)
+        # # torch.Size([8, 1, 601]) - > torch.Size([8, 601])
+        # value = value.squeeze(1)
 
         # torch.Size([8,]) - > torch.Size([8, 1])
         # reward = torch.tensor(reward).unsqueeze(-1) # TODO(pu)

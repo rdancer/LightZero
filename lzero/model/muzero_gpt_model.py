@@ -11,7 +11,7 @@ from ding.torch_utils import MLP, ResBlock
 from ding.utils import MODEL_REGISTRY, SequenceType
 from numpy import ndarray
 
-from .common import MZNetworkOutput, RepresentationNetwork, PredictionNetwork
+from .common import MZNetworkOutput, RepresentationNetwork, PredictionNetwork, PredictionNetworkMLP
 from .utils import renormalize, get_params_mean, get_dynamic_mean, get_reward_mean
 
 
@@ -162,14 +162,43 @@ class MuZeroModelGPT(nn.Module):
             activation=activation,
             norm_type=norm_type,
             # embedding_dim=cfg.embedding_dim,
-            embedding_dim=cfg.tokenizer.embed_dim,
+            embedding_dim=cfg.world_model.embed_dim,
+        )
+
+        # self.prediction_network = PredictionNetwork(
+        #     observation_shape,
+        #     action_space_size,
+        #     num_res_blocks,
+        #     num_channels,
+        #     value_head_channels,
+        #     policy_head_channels,
+        #     fc_value_layers,
+        #     fc_policy_layers,
+        #     self.value_support_size,
+        #     flatten_output_size_for_value_head,
+        #     flatten_output_size_for_policy_head,
+        #     downsample,
+        #     last_linear_layer_init_zero=self.last_linear_layer_init_zero,
+        #     activation=activation,
+        #     norm_type=norm_type
+        # )
+
+        latent_state_dim = 256
+        self.prediction_network = PredictionNetworkMLP(
+            action_space_size=action_space_size,
+            num_channels=latent_state_dim,
+            fc_value_layers=fc_value_layers,
+            fc_policy_layers=fc_policy_layers,
+            output_support_size=self.value_support_size,
+            last_linear_layer_init_zero=self.last_linear_layer_init_zero,
+            norm_type=norm_type
         )
 
         Encoder = Encoder(cfg.tokenizer.encoder)
         Decoder = Decoder(cfg.tokenizer.decoder)
         self.tokenizer = Tokenizer(cfg.tokenizer.vocab_size, cfg.tokenizer.embed_dim, Encoder, Decoder, with_lpips=True, representation_network=self.representation_network)
         self.world_model = WorldModel(obs_vocab_size=self.tokenizer.vocab_size, act_vocab_size=self.action_space_size,
-                                      config=cfg.world_model, tokenizer=self.tokenizer)
+                                      config=cfg.world_model, tokenizer=self.tokenizer, prediction_network=self.prediction_network)
         print(f'{sum(p.numel() for p in self.tokenizer.parameters())} parameters in agent.tokenizer')
         print(f'{sum(p.numel() for p in self.world_model.parameters())} parameters in agent.world_model')
 
@@ -261,9 +290,12 @@ class MuZeroModelGPT(nn.Module):
         latent_state = obs_token
 
         # torch.Size([8, 1, 2]) - > torch.Size([8, 2])
-        policy_logits = policy_logits.squeeze(1)
-        # torch.Size([8, 1, 601]) - > torch.Size([8, 601])
-        value = value.squeeze(1)
+        # policy_logits = policy_logits.squeeze(1)
+        # # torch.Size([8, 1, 601]) - > torch.Size([8, 601])
+        # value = value.squeeze(1)
+
+        policy_logits, value = self.prediction_network(latent_state.squeeze(1))
+
 
         return MZNetworkOutput(
             value,
@@ -315,9 +347,13 @@ class MuZeroModelGPT(nn.Module):
         next_latent_state = logits_observations
 
         # torch.Size([8, 1, 2]) - > torch.Size([8, 2])
-        policy_logits = policy_logits.squeeze(1)
-        # torch.Size([8, 1, 601]) - > torch.Size([8, 601])
-        value = value.squeeze(1)
+        # policy_logits = policy_logits.squeeze(1)
+        # # torch.Size([8, 1, 601]) - > torch.Size([8, 601])
+        # value = value.squeeze(1)
+
+
+        policy_logits, value = self.prediction_network(next_latent_state.squeeze(1))
+
 
         # torch.Size([8,]) - > torch.Size([8, 1])
         # reward = torch.tensor(reward).unsqueeze(-1) # TODO(pu)

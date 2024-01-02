@@ -37,11 +37,12 @@ class WorldModelOutput:
 
 
 class WorldModel(nn.Module):
-    def __init__(self, obs_vocab_size: int, act_vocab_size: int, config: TransformerConfig, tokenizer, representation_network=None) -> None:
+    def __init__(self, obs_vocab_size: int, act_vocab_size: int, config: TransformerConfig, tokenizer, representation_network=None, prediction_network=None) -> None:
         super().__init__()
         self.tokenizer = tokenizer
         self.obs_vocab_size, self.act_vocab_size = obs_vocab_size, act_vocab_size
         self.config = config
+        self.prediction_network = prediction_network
 
         self.transformer = Transformer(config)
         # self.num_observations_tokens = 16
@@ -202,7 +203,7 @@ class WorldModel(nn.Module):
         if self.num_observations_tokens==16:  # k=16
             self.projection_input_dim = 128
         elif self.num_observations_tokens==1:  # K=1
-            self.projection_input_dim = 1024 # for atari #TODO
+            self.projection_input_dim = self.obs_per_embdding_dim # for atari #TODO
             # self.projection_input_dim = 256 # for cartpole
 
 
@@ -412,32 +413,27 @@ class WorldModel(nn.Module):
             obs_tokens = obs_tokens.contiguous().view(buffer_action.shape[0], -1, num_observations_tokens, self.obs_per_embdding_dim) # (BL, K) for unroll_step=1
 
             # obs_tokens = obs_tokens.view(-1, self.config.max_blocks+1, num_observations_tokens) # (BL, K)
-            obs_tokens = obs_tokens[:, :-1, :]
+            obs_tokens = obs_tokens[:, :-1, :]  # NOTE: 
             # obs_tokens = obs_tokens.reshape(32*6, num_observations_tokens) # (BL, K)
             buffer_action = torch.from_numpy(buffer_action).to(obs_tokens.device)
             act_tokens = rearrange(buffer_action, 'b l -> b l 1')
-
-            # # 选择每个样本的最后一步
-            # last_steps = act_tokens[:, -1:, :]  # 这将选择最后一列并保持维度不变
-            # # 使用torch.cat在第二个维度上连接原始act_tokens和last_steps
-            # act_tokens = torch.cat((act_tokens, last_steps), dim=1)
 
             # print('init inference: unroll 5 steps!')  17*6=102  17*5=85
             obs_embeddings = obs_tokens
             outputs_wm = self.forward({'obs_embeddings_and_act_tokens': (obs_embeddings, act_tokens)}, is_root=False)
 
+            # outputs_wm.logits_value = rearrange(outputs_wm.logits_value, 'b t e -> (b t) e')
 
-            # outputs_wm = self.forward(tokens, is_root=False)  # Note: is_root=False
 
-            # 选择每个样本的最后一步
-            last_steps = outputs_wm.logits_value[:, -1:, :]  # 这将选择最后一列并保持维度不变
-            # 使用torch.cat在第二个维度上连接原始act_tokens和last_steps
-            outputs_wm.logits_value = torch.cat((outputs_wm.logits_value, last_steps), dim=1)
+            # first obs step
+            policy_logits_first_step, value_first_step = self.prediction_network(obs_embeddings.squeeze(2)[:, 0, :])
+            # second to last obs step
+            logits_observations = rearrange(outputs_wm.logits_observations, 'b t o -> (b t) o')
+            policy_logits, value = self.prediction_network(logits_observations)
 
-            # Reshape your tensors
-            #  outputs_wm.logits_value.shape (30,21) = (B*6, 21)
-            outputs_wm.logits_value = rearrange(outputs_wm.logits_value, 'b t e -> (b t) e')
-
+            policy_logits_all_steps = torch.cat([policy_logits_first_step, policy_logits])
+            value_all_steps = torch.cat([value_first_step, value])
+            outputs_wm.logits_policy, outputs_wm.logits_value = policy_logits_all_steps, value_all_steps
 
         # return WorldModelOutput(x, logits_observations, logits_rewards, logits_ends, logits_policy, logits_value)
         return outputs_wm
@@ -613,6 +609,8 @@ class WorldModel(nn.Module):
                 if len(token.shape) != 2:
                     token = token.squeeze(-1)  # Ensure the token tensor shape is (B, 1)
                 obs_tokens.append(token)
+                # policy_logits, value = self.prediction_network(token.squeeze(1))
+
 
         output_sequence = torch.cat(output_sequence, dim=1)  # (B, 1 + K, E)
         # Before updating self.obs_tokens, delete the old one to free memory
@@ -630,7 +628,9 @@ class WorldModel(nn.Module):
             # TODO: lru_cache
             self.past_keys_values_cache.popitem(last=False)  # Removes the earliest inserted item
 
-        return outputs_wm.output_sequence, self.obs_tokens, reward, outputs_wm.logits_policy, outputs_wm.logits_value
+        # return outputs_wm.output_sequence, self.obs_tokens, reward, outputs_wm.logits_policy, outputs_wm.logits_value
+        return outputs_wm.output_sequence, self.obs_tokens, reward, None, None
+
 
 
     def compute_loss(self, batch, tokenizer: Tokenizer=None, **kwargs: Any) -> LossWithIntermediateLosses:
@@ -663,6 +663,8 @@ class WorldModel(nn.Module):
         # outputs = self.forward(tokens, is_root=False)
         outputs = self.forward({'obs_embeddings_and_act_tokens': (obs_embeddings, act_tokens)}, is_root=False)
 
+
+
         labels_observations, labels_rewards, labels_ends = self.compute_labels_world_model(obs_embeddings, batch['rewards'],
                                                                                            batch['ends'],
                                                                                            batch['mask_padding'])
@@ -690,6 +692,7 @@ class WorldModel(nn.Module):
 
         loss_obs = torch.nn.functional.mse_loss(logits_observations, labels_observations.detach(), reduction='none').mean(-1)
 
+
         
         # batch['mask_padding'] shape 32, 5
         # loss_obs = (loss_obs* batch['mask_padding']).mean()
@@ -715,11 +718,25 @@ class WorldModel(nn.Module):
                                                                                    batch['mask_padding'])
 
         loss_rewards = self.compute_cross_entropy_loss(outputs, labels_rewards, batch, element='rewards')
-        loss_policy = self.compute_cross_entropy_loss(outputs, labels_policy, batch, element='policy')
-        """torch.eq(labels_observations, logits_observations.argmax(-1)).sum().item() / labels_observations.shape[0]
-        F.cross_entropy(logits_observations, logits_observations.argmax(-1))
-        """
-        loss_value = self.compute_cross_entropy_loss(outputs, labels_value, batch, element='value')
+
+        # first obs step
+        policy_logits_first_step, value_first_step = self.prediction_network(obs_embeddings.squeeze(1)[:32])
+        loss_policy = self.compute_cross_entropy_loss_policy_value_first_step(policy_logits_first_step, labels_policy, batch)
+        loss_value = self.compute_cross_entropy_loss_policy_value_first_step( value_first_step , labels_value, batch)
+
+        # second to last obs step
+        policy_logits, value = self.prediction_network(logits_observations)
+        loss_policy += self.compute_cross_entropy_loss_policy_value(policy_logits, labels_policy, batch)
+        loss_value += self.compute_cross_entropy_loss_policy_value(value, labels_value, batch)
+        loss_policy = loss_policy/2
+        loss_value = loss_value/2
+
+
+        # loss_policy = self.compute_cross_entropy_loss(outputs, labels_policy, batch, element='policy')
+        # """torch.eq(labels_observations, logits_observations.argmax(-1)).sum().item() / labels_observations.shape[0]
+        # F.cross_entropy(logits_observations, logits_observations.argmax(-1))
+        # """
+        # loss_value = self.compute_cross_entropy_loss(outputs, labels_value, batch, element='value')
 
         return LossWithIntermediateLosses(loss_obs=loss_obs, loss_rewards=loss_rewards, loss_value=loss_value,
                                           loss_policy=loss_policy)
@@ -748,6 +765,24 @@ class WorldModel(nn.Module):
 
 
         return loss_rewards
+
+    def compute_cross_entropy_loss_policy_value(self, logits_policy, labels, batch):
+        # Reshape your tensors
+        # logits_policy = rearrange(logits_policy, 'b e -> (b) e')
+        labels = labels.reshape(-1, labels.shape[-1])[32:]  # Assuming labels originally has shape [b, t, reward_dim]
+        # Reshape your mask. True means valid data.
+        mask_padding = rearrange(batch['mask_padding'], 'b t -> (b t)')[32:]  # 128=32*4
+        loss_policy = -(torch.log_softmax(logits_policy, dim=1) * labels).sum(1)
+        loss_policy = (loss_policy * mask_padding).mean()
+
+        return loss_policy
+
+    def compute_cross_entropy_loss_policy_value_first_step(self, logits_policy, labels, batch):
+        labels = labels.reshape(-1, labels.shape[-1])[:32]
+        mask_padding = rearrange(batch['mask_padding'], 'b t -> (b t)')[:32]  # 128=32*4
+        loss_policy = -(torch.log_softmax(logits_policy, dim=1) * labels).sum(1)
+        loss_policy = (loss_policy * mask_padding).mean()
+        return loss_policy
 
     def compute_labels_world_model(self, obs_embeddings: torch.Tensor, rewards: torch.Tensor, ends: torch.Tensor,
                                    mask_padding: torch.BoolTensor) -> Tuple[

@@ -9,7 +9,9 @@ cfg['tokenizer'] = {'_target_': 'models.tokenizer.Tokenizer',
                     # 'embed_dim': 64,
                     'vocab_size': 128,  # TODO: for atari debug
                     # 'embed_dim': 128, # z_channels
-                    'embed_dim': 1024, # z_channels
+                    # 'embed_dim': 1024, # z_channels
+                    'embed_dim': 256, # z_channels
+
 
                                         'encoder':
                                {'resolution': 64, 'in_channels': 3, 'z_channels': 128, 'ch': 64,
@@ -52,8 +54,8 @@ cfg['world_model'] = {
                       'tokens_per_block': 2,
                       'max_blocks': 5,
                       "max_tokens": 2 * 5,  # TODO： horizon
-                      'embed_dim':1024, # TODO：for atari
-                      # 'embed_dim':256, # TODO：for atari
+                      # 'embed_dim':1024, # TODO：for atari
+                      'embed_dim':256, # TODO：for atari
 
 
                       'attention': 'causal',
@@ -64,7 +66,7 @@ cfg['world_model'] = {
                       'embed_pdrop': 0.1,
                       'resid_pdrop': 0.1,
                       'attn_pdrop': 0.1,
-                      "device": 'cuda:3',
+                      "device": 'cuda:0',
                     #   "device": 'cpu',
                       'support_size': 21,
                       'action_shape': 6,# TODO：for atari

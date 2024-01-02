@@ -361,7 +361,7 @@ class RepresentationNetworkMLP(nn.Module):
             - output (:obj:`torch.Tensor`): :math:`(B, hidden_channels)`, where B is batch size.
         """
         x = self.fc_representation(x)
-        print('no AvgL1Norm', x.max(), x.min())
+        # print('no AvgL1Norm', x.max(), x.min())
 
         # print('before AvgL1Norm', x.max(), x.min())
         x = AvgL1Norm(x)

@@ -1,6 +1,6 @@
 from easydict import EasyDict
 import torch
-torch.cuda.set_device(3)
+torch.cuda.set_device(0)
 
 # options={'PongNoFrameskip-v4', 'QbertNoFrameskip-v4', 'MsPacmanNoFrameskip-v4', 'SpaceInvadersNoFrameskip-v4', 'BreakoutNoFrameskip-v4', ...}
 env_name = 'PongNoFrameskip-v4'
@@ -64,7 +64,7 @@ atari_muzero_config = dict(
     # TODO: world_model.py decode_obs_tokens
     # TODO: tokenizer.py: lpips loss
     # exp_name=f'data_mz_gpt_ctree_1226/{env_name[:-14]}_muzero_gpt_ns{num_simulations}_upc{update_per_collect}-mur{model_update_ratio}_rr{reanalyze_ratio}_H{num_unroll_steps}_bs{batch_size}_mcs1000_contembdings_mz-repenet-lastlinear-lsd256_obsmseloss_rep-robustscaling-norm_prior-false_obsloss2-avgl1norm_seed0',
-    exp_name=f'data_mz_gpt_ctree_1226/{env_name[:-14]}_muzero_gpt_ns{num_simulations}_upc{update_per_collect}-mur{model_update_ratio}_rr{reanalyze_ratio}_H{num_unroll_steps}_bs{batch_size}_mcs1000_contembdings_mz-repenet-lastlinear-lsd1024_obsmseloss_rep-avgl1norm_obsloss2_seed0',
+    exp_name=f'data_mz_gpt_ctree_1226/{env_name[:-14]}_muzero_gpt_ns{num_simulations}_upc{update_per_collect}-mur{model_update_ratio}_rr{reanalyze_ratio}_H{num_unroll_steps}_bs{batch_size}_mcs1000_contembdings_mz-repenet-lastlinear-lsd1024_obsmseloss2_rep-avgl1norm_p-v-condition-s_seed0',
 
     # exp_name=f'data_mz_gpt_ctree_1226/{env_name[:-14]}_muzero_gpt_ns{num_simulations}_upc{update_per_collect}-mur{model_update_ratio}_rr{reanalyze_ratio}_H{num_unroll_steps}_per-obs-emd-dim-128_tran-nlayers2-emd128-nh2_batch8_bs{batch_size}_tok1e-4-tra3e-3_temp025_mcs1000_contembdings_ez-ssl-loss_lsd1024_seed0',
     # exp_name=f'data_mz_gpt_ctree_1226/{env_name[:-14]}_muzero_gpt_ns{num_simulations}_upc{update_per_collect}-mur{model_update_ratio}_rr{reanalyze_ratio}_H{num_unroll_steps}_per-obs-emd-dim-128_tran-nlayers2-emd128-nh2_batch8_bs{batch_size}_tok1e-4-tra3e-3_temp025_mcs1000_contembdings_mz-repenet_obsmseloss-lastlinear_lsd1024_trans-obs-emb-init0_rep-robustscaling-norm_prior-false_seed0',
@@ -138,7 +138,8 @@ atari_muzero_config = dict(
             reward_support_size=21,
             value_support_size=21,
             support_scale=10,
-            embedding_dim=1024,
+            # embedding_dim=1024,
+            embedding_dim=256,
         ),
         use_priority=False,
         cuda=True,
