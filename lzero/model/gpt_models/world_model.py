@@ -424,16 +424,19 @@ class WorldModel(nn.Module):
 
             # outputs_wm.logits_value = rearrange(outputs_wm.logits_value, 'b t e -> (b t) e')
 
-
             # first obs step
-            policy_logits_first_step, value_first_step = self.prediction_network(obs_embeddings.squeeze(2)[:, 0, :])
-            # second to last obs step
-            logits_observations = rearrange(outputs_wm.logits_observations, 'b t o -> (b t) o')
-            policy_logits, value = self.prediction_network(logits_observations)
+            # policy_logits_first_step, value_first_step = self.prediction_network(obs_embeddings.squeeze(2)[:, 0, :])
+            # # second to last obs step
+            # logits_observations = rearrange(outputs_wm.logits_observations, 'b t o -> (b t) o')
+            # policy_logits, value = self.prediction_network(logits_observations)
+            # policy_logits_all_steps = torch.cat([policy_logits_first_step, policy_logits])
+            # value_all_steps = torch.cat([value_first_step, value])
+            # outputs_wm.logits_policy, outputs_wm.logits_value = policy_logits_all_steps, value_all_steps
 
-            policy_logits_all_steps = torch.cat([policy_logits_first_step, policy_logits])
-            value_all_steps = torch.cat([value_first_step, value])
+            # all obs step
+            policy_logits_all_steps, value_all_steps = self.prediction_network(obs_embeddings.squeeze(2).contiguous().view(-1, self.obs_per_embdding_dim))
             outputs_wm.logits_policy, outputs_wm.logits_value = policy_logits_all_steps, value_all_steps
+
 
         # return WorldModelOutput(x, logits_observations, logits_rewards, logits_ends, logits_policy, logits_value)
         return outputs_wm
@@ -722,7 +725,7 @@ class WorldModel(nn.Module):
         # first obs step
         policy_logits_first_step, value_first_step = self.prediction_network(obs_embeddings.squeeze(1)[:32])
         loss_policy = self.compute_cross_entropy_loss_policy_value_first_step(policy_logits_first_step, labels_policy, batch)
-        loss_value = self.compute_cross_entropy_loss_policy_value_first_step( value_first_step , labels_value, batch)
+        loss_value = self.compute_cross_entropy_loss_policy_value_first_step(value_first_step , labels_value, batch)
 
         # second to last obs step
         policy_logits, value = self.prediction_network(logits_observations)
