@@ -520,7 +520,10 @@ class MuZeroGPTPolicy(Policy):
         # ==============================================================
         intermediate_losses = defaultdict(float)
         # losses = self._learn_model.world_model.compute_loss(batch_for_gpt, self._learn_model.tokenizer)
-        losses = self._learn_model.world_model.compute_loss(batch_for_gpt)
+        # losses = self._learn_model.world_model.compute_loss(batch_for_gpt)
+        losses = self._learn_model.world_model.compute_loss_teaforN(batch_for_gpt)
+
+        
 
         weighted_total_loss = losses.loss_total
         for loss_name, loss_value in losses.intermediate_losses.items():

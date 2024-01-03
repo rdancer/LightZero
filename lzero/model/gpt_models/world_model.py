@@ -635,86 +635,26 @@ class WorldModel(nn.Module):
         return outputs_wm.output_sequence, self.obs_tokens, reward, None, None
 
 
-
     def compute_loss(self, batch, tokenizer: Tokenizer=None, **kwargs: Any) -> LossWithIntermediateLosses:
-
-        if len(batch['observations'][0, 0].shape) == 3:
-            # obs is a 3-dimensional image
-            pass
-        # elif len(batch['observations'][0, 0].shape) == 1:
-        #     # print('obs is a 1-dimensional vector.')
-        #     # TODO()
-        #     # obs is a 1-dimensional vector
-        #     original_shape = list(batch['observations'].shape)
-        #     desired_shape = original_shape + [64, 64]
-        #     expanded_observations = batch['observations'].unsqueeze(-1).unsqueeze(-1)
-        #     expanded_observations = expanded_observations.expand(*desired_shape)
-        #     batch['observations'] = expanded_observations
-
-        # with torch.no_grad():
-        #     # 目前这里是没有梯度的
-        #     obs_tokens = tokenizer.encode(batch['observations'], should_preprocess=True).tokens  # (BL, K)
-
         # NOTE: 这里是需要梯度的
-        # obs_tokens = tokenizer.encode(batch['observations'], should_preprocess=True).tokens  # (BL, K)
         obs_embeddings = self.tokenizer.encode_to_obs_embeddings(batch['observations'], should_preprocess=True) # (B, C, H, W) -> (B, K, E)
-
 
         act_tokens = rearrange(batch['actions'], 'b l -> b l 1')
 
-        # tokens = rearrange(torch.cat((obs_tokens, act_tokens), dim=2), 'b l k1 -> b (l k1)')  # (B, L(K+1))
-        # outputs = self.forward(tokens, is_root=False)
         outputs = self.forward({'obs_embeddings_and_act_tokens': (obs_embeddings, act_tokens)}, is_root=False)
-
-
 
         labels_observations, labels_rewards, labels_ends = self.compute_labels_world_model(obs_embeddings, batch['rewards'],
                                                                                            batch['ends'],
                                                                                            batch['mask_padding'])
 
-        """
-        >>> # Example of target with class probabilities
-        >>> input = torch.randn(3, 5, requires_grad=True)
-        >>> target = torch.randn(3, 5).softmax(dim=1)
-        >>> loss = F.cross_entropy(input, target)
-        >>> loss.backward()
-        """
         logits_observations = rearrange(outputs.logits_observations[:, :-1], 'b t o -> (b t) o')
         labels_observations = labels_observations.contiguous().view(-1, self.projection_input_dim)  # TODO:
-        # loss_obs = F.cross_entropy(logits_observations, labels_observations)
-
-        # TODO: EZ consistency loss; TWM loss
-        # loss_obs = self.negative_cosine_similarity(logits_observations, labels_observations.detach())  # 2528 = 32 * 79 = 32, 5*16-1
-        
-        
-        # obs_projection = self.projection(logits_observations)
-        # obs_prediction = self.prediction_head(obs_projection)
-        # obs_target =  self.projection(labels_observations).detach()
-        # loss_obs = self.negative_cosine_similarity(obs_prediction, obs_target)
-
 
         loss_obs = torch.nn.functional.mse_loss(logits_observations, labels_observations.detach(), reduction='none').mean(-1)
 
 
-        
-        # batch['mask_padding'] shape 32, 5
-        # loss_obs = (loss_obs* batch['mask_padding']).mean()
-
-        # Step 1: 扩展mask_padding
-        # 除去最后一个time step，每个time step 重复16次  NOTE检查shape是否reshape正确
-        # mask_padding_expanded = batch['mask_padding'].unsqueeze(-1).repeat(1, 1, self.num_observations_tokens).reshape(32, -1)[:, :-1].contiguous().view(-1)
-
         mask_padding_expanded = batch['mask_padding'][:, 1:].contiguous().view(-1) # TODO:
-        # mask_padding_expanded = batch['mask_padding'][:, :-1].contiguous().view(-1)
-
-        # 应用mask到loss_obs
-        # 使用inverted mask，因为我们想要保留非padding的loss
         loss_obs = (loss_obs * mask_padding_expanded).mean(-1)
-        # if loss_obs > 10:
-        #     print('debug')
-
-        # loss_ends = F.cross_entropy(rearrange(outputs.logits_ends, 'b t e -> (b t) e'), labels_ends)
-
 
         labels_policy, labels_value = self.compute_labels_world_model_value_policy(batch['target_value'],
                                                                                    batch['target_policy'],
@@ -734,12 +674,124 @@ class WorldModel(nn.Module):
         loss_policy = loss_policy/2
         loss_value = loss_value/2
 
+        return LossWithIntermediateLosses(loss_obs=loss_obs, loss_rewards=loss_rewards, loss_value=loss_value,
+                                          loss_policy=loss_policy)
 
-        # loss_policy = self.compute_cross_entropy_loss(outputs, labels_policy, batch, element='policy')
-        # """torch.eq(labels_observations, logits_observations.argmax(-1)).sum().item() / labels_observations.shape[0]
-        # F.cross_entropy(logits_observations, logits_observations.argmax(-1))
-        # """
-        # loss_value = self.compute_cross_entropy_loss(outputs, labels_value, batch, element='value')
+
+    def compute_loss_teaforN(self, batch, tokenizer: Tokenizer=None, **kwargs: Any) -> LossWithIntermediateLosses:
+        N = 4
+        # 注意：这里的 N 是 TeaForN 中的 N，表示向前看的步数
+        # 编码观察结果为 embeddings
+        obs_embeddings_rep = self.tokenizer.encode_to_obs_embeddings(batch['observations'], should_preprocess=True)  # (B, C, H, W) -> (B, K, E)=(160=32*5, 1, 256)
+        act_tokens = rearrange(batch['actions'], 'b l -> b l 1')
+        outputs = self.forward({'obs_embeddings_and_act_tokens': (obs_embeddings_rep, act_tokens)}, is_root=False)
+
+        # 计算 N 步的标签
+        n = 0
+        labels_observations, labels_rewards, labels_ends = self.compute_labels_world_model_at_n_iter(obs_embeddings_rep, batch['rewards'],
+                                                                                                batch['ends'], batch['mask_padding'], n)
+
+        # 获取每个时间步的 logits，这里的 outputs 需要包含未来 N 步的 logits
+        logits_observations = rearrange(outputs.logits_observations[:, :-1-n], 'b t o -> (b t) o')
+        labels_n = labels_observations[:, n:].contiguous().view(-1, self.projection_input_dim)  # TODO: 调整 labels_observations 以匹配 logits_n 的形状
+
+        # 计算 MSE 损失
+        loss_obs = torch.nn.functional.mse_loss(logits_observations, labels_n.detach(), reduction='none').mean(-1)
+
+        # 应用 mask_padding
+        mask_padding_expanded = batch['mask_padding'][:, 1+n:].contiguous().view(-1)  # TODO: 调整 mask_padding 以匹配输出时间步
+        loss_obs = (loss_obs * mask_padding_expanded).mean(-1)
+
+        # 累积总损失
+
+        labels_policy, labels_value = self.compute_labels_world_model_value_policy_at_n_iter(batch['target_value'],
+                                                                                batch['target_policy'],
+                                                                                batch['mask_padding'], n)
+
+        loss_reward = self.compute_cross_entropy_loss(outputs, labels_rewards, batch, element='rewards')
+
+        # first obs step
+        policy_logits_first_step, value_first_step = self.prediction_network(obs_embeddings_rep.squeeze(1)[:32])
+        loss_policy = self.compute_cross_entropy_loss_policy_value_first_step(policy_logits_first_step, labels_policy, batch)
+        loss_value = self.compute_cross_entropy_loss_policy_value_first_step(value_first_step , labels_value, batch)
+
+        # second to last obs step
+        policy_logits, value = self.prediction_network(logits_observations)
+        loss_policy += self.compute_cross_entropy_loss_policy_value(policy_logits, labels_policy, batch)
+        loss_value += self.compute_cross_entropy_loss_policy_value(value, labels_value, batch)
+        loss_policy = loss_policy/2
+        loss_value = loss_value/2
+
+        # 初始化总观察损失
+        total_loss_obs = loss_obs
+        total_loss_reward = loss_reward
+        total_loss_policy = loss_policy
+        total_loss_value = loss_value
+
+
+        # 循环遍历每一个步骤，累积损失
+        for n in range(1, N):
+            # logits_n = rearrange(outputs.logits_observations[:, :-1-n], 'b t o -> (b t) o')
+            # 输入的obs_embeddings是逐步往后移动的，其他变量都是包括所有steps
+            # obs_embeddings = rearrange(outputs.logits_observations[:, n:], 'b t o -> (b t) o')
+            obs_embeddings = rearrange(outputs.logits_observations[:, 1:], 'b t o -> (b t) o')
+            obs_embeddings = obs_embeddings.view(32, -1, obs_embeddings.shape[-1])
+            act_tokens = rearrange(batch['actions'][:,n:], 'b l -> b l 1')
+            # batch['mask_padding'] = batch['mask_padding'][:, 1+n:]
+
+            outputs = self.forward({'obs_embeddings_and_act_tokens': (obs_embeddings, act_tokens)}, is_root=False)
+
+            # 计算 N 步的标签
+            labels_observations, labels_rewards, labels_ends = self.compute_labels_world_model_at_n_iter(obs_embeddings_rep, batch['rewards'],
+                                                                                                batch['ends'], batch['mask_padding'], n)
+
+            # 获取每个时间步的 logits，这里的 outputs 需要包含未来 N 步的 logits
+            # logits_observations = rearrange(outputs.logits_observations[:, :-1-n], 'b t o -> (b t) o')
+            logits_observations = rearrange(outputs.logits_observations[:, :-1], 'b t o -> (b t) o')
+            labels_n = labels_observations.contiguous().view(-1, self.projection_input_dim)  # TODO: 调整 labels_observations 以匹配 logits_n 的形状
+
+            # 计算 MSE 损失
+            loss_obs = torch.nn.functional.mse_loss(logits_observations, labels_n.detach(), reduction='none').mean(-1)
+
+            # 应用 mask_padding
+            mask_padding_expanded = batch['mask_padding'][:, 1+n:].contiguous().view(-1)  # TODO: 调整 mask_padding 以匹配输出时间步
+
+            loss_obs = (loss_obs * mask_padding_expanded).mean(-1)
+
+            # 累积总损失
+            # total_loss_obs += loss_obs
+
+
+            labels_policy, labels_value = self.compute_labels_world_model_value_policy_at_n_iter(batch['target_value'],
+                                                                                    batch['target_policy'],
+                                                                                    batch['mask_padding'], n)
+
+            loss_reward_n = self.compute_cross_entropy_loss_n_steps(outputs, labels_rewards, batch, 'rewards', n)
+
+            # first obs step: 从包含所有时间步的obs_embeddings_rep中提取出当前考虑的第一步，即第n步
+            policy_logits_first_step, value_first_step = self.prediction_network(obs_embeddings_rep.squeeze(1)[32*(n+1):32*(n+2)])
+            loss_policy = self.compute_cross_entropy_loss_policy_value_first_step_at_n_iter(policy_logits_first_step, labels_policy, batch, n)
+            loss_value = self.compute_cross_entropy_loss_policy_value_first_step_at_n_iter(value_first_step , labels_value, batch, n)
+
+            # second to last obs step
+            policy_logits, value = self.prediction_network(logits_observations)
+            loss_policy += self.compute_cross_entropy_loss_policy_value_at_n_iter(policy_logits, labels_policy, batch, n)
+            loss_value += self.compute_cross_entropy_loss_policy_value_at_n_iter(value, labels_value, batch, n)
+            loss_policy_n = loss_policy/2
+            loss_value_n = loss_value/2
+            # 累积总损失
+            total_loss_obs += loss_obs
+            total_loss_reward += loss_reward_n
+            total_loss_policy += loss_policy_n
+            total_loss_value += loss_value_n
+
+
+        # 平均 N 步的观察损失
+        loss_obs = total_loss_obs / N
+        loss_rewards = total_loss_reward / N
+        loss_value = total_loss_value / N
+        loss_policy = total_loss_policy / N
+
 
         return LossWithIntermediateLosses(loss_obs=loss_obs, loss_rewards=loss_rewards, loss_value=loss_value,
                                           loss_policy=loss_policy)
@@ -768,6 +820,32 @@ class WorldModel(nn.Module):
 
 
         return loss_rewards
+    
+
+    def compute_cross_entropy_loss_n_steps(self, outputs, labels, batch, element='rewards', n=0):
+        # Assume outputs.logits_rewards and labels are your predictions and targets
+        # And mask_padding is a boolean tensor with True at positions to keep and False at positions to ignore
+
+        if element == 'rewards':
+            logits = outputs.logits_rewards
+        elif element == 'policy':
+            logits = outputs.logits_policy
+        elif element == 'value':
+            logits = outputs.logits_value
+
+        # Reshape your tensors
+        logits_rewards = rearrange(logits, 'b t e -> (b t) e')
+        labels = labels.reshape(-1, labels.shape[-1])  # Assuming labels originally has shape [b, t, reward_dim]
+
+        # Reshape your mask. True means valid data.
+        mask_padding = rearrange(batch['mask_padding'][:, n:], 'b t -> (b t)')
+
+        loss_rewards = -(torch.log_softmax(logits_rewards, dim=1) * labels).sum(1)
+        # loss_rewards = (loss_rewards * mask_padding.squeeze(-1).float()).mean()
+        loss_rewards = (loss_rewards * mask_padding).mean()
+
+
+        return loss_rewards
 
     def compute_cross_entropy_loss_policy_value(self, logits_policy, labels, batch):
         # Reshape your tensors
@@ -777,7 +855,16 @@ class WorldModel(nn.Module):
         mask_padding = rearrange(batch['mask_padding'], 'b t -> (b t)')[32:]  # 128=32*4
         loss_policy = -(torch.log_softmax(logits_policy, dim=1) * labels).sum(1)
         loss_policy = (loss_policy * mask_padding).mean()
+        return loss_policy
 
+    def compute_cross_entropy_loss_policy_value_at_n_iter(self, logits_policy, labels, batch, n):
+        # Reshape your tensors
+        # logits_policy = rearrange(logits_policy, 'b e -> (b) e')
+        labels = labels.reshape(-1, labels.shape[-1])[32:]  # Assuming labels originally has shape [b, t, reward_dim]
+        # Reshape your mask. True means valid data.
+        mask_padding = rearrange(batch['mask_padding'][:, n:], 'b t -> (b t)')[32:]  # 128=32*4
+        loss_policy = -(torch.log_softmax(logits_policy, dim=1) * labels).sum(1)
+        loss_policy = (loss_policy * mask_padding).mean()
         return loss_policy
 
     def compute_cross_entropy_loss_policy_value_first_step(self, logits_policy, labels, batch):
@@ -787,15 +874,44 @@ class WorldModel(nn.Module):
         loss_policy = (loss_policy * mask_padding).mean()
         return loss_policy
 
+    def compute_cross_entropy_loss_policy_value_first_step_at_n_iter(self, logits_policy, labels, batch, n):
+        labels = labels.reshape(-1, labels.shape[-1])[:32]
+        mask_padding = rearrange(batch['mask_padding'][:, n:], 'b t -> (b t)')[:32]  # 128=32*4
+        loss_policy = -(torch.log_softmax(logits_policy, dim=1) * labels).sum(1)
+        loss_policy = (loss_policy * mask_padding).mean()
+        return loss_policy
+
+    def compute_labels_world_model_at_n_iter(self, obs_embeddings: torch.Tensor, rewards: torch.Tensor, ends: torch.Tensor,
+                                   mask_padding: torch.BoolTensor, n) -> Tuple[
+        torch.Tensor, torch.Tensor, torch.Tensor]:
+        assert torch.all(ends.sum(dim=1) <= 1)  # each sequence sample has at most 1 done
+        mask_fill = torch.logical_not(mask_padding)
+        labels_observations = obs_embeddings.contiguous().view(rewards.shape[0], -1, self.projection_input_dim)[:, 1+n:] # self.projection_input_dim
+
+        mask_fill_rewards = mask_fill.unsqueeze(-1).expand_as(rewards)
+        labels_rewards = rewards.masked_fill(mask_fill_rewards, -100)[:, n:]
+
+        labels_ends = ends.masked_fill(mask_fill, -100)[:, n:]
+        return labels_observations, labels_rewards.reshape(-1, self.support_size), labels_ends.reshape(-1)
+
+    def compute_labels_world_model_value_policy_at_n_iter(self, target_value: torch.Tensor, target_policy: torch.Tensor,
+                                                mask_padding: torch.BoolTensor, n) -> Tuple[
+        torch.Tensor, torch.Tensor]:
+
+        mask_fill = torch.logical_not(mask_padding)
+        mask_fill_policy = mask_fill.unsqueeze(-1).expand_as(target_policy)
+        labels_policy = target_policy.masked_fill(mask_fill_policy, -100)[:, n:]
+
+        mask_fill_value = mask_fill.unsqueeze(-1).expand_as(target_value)
+        labels_value = target_value.masked_fill(mask_fill_value, -100)[:, n:]
+        return labels_policy.reshape(-1, self.action_shape), labels_value.reshape(-1, self.support_size)  # TODO(pu)
+
     def compute_labels_world_model(self, obs_embeddings: torch.Tensor, rewards: torch.Tensor, ends: torch.Tensor,
                                    mask_padding: torch.BoolTensor) -> Tuple[
         torch.Tensor, torch.Tensor, torch.Tensor]:
         assert torch.all(ends.sum(dim=1) <= 1)  # each sequence sample has at most 1 done
         mask_fill = torch.logical_not(mask_padding)
         labels_observations = obs_embeddings.contiguous().view(rewards.shape[0], -1, self.projection_input_dim)[:, 1:] # self.projection_input_dim
-
-
-        # labels_rewards = (rewards.sign() + 1).masked_fill(mask_fill, -100).long()  # Rewards clipped to {-1, 0, 1} TODO(pu)
 
         mask_fill_rewards = mask_fill.unsqueeze(-1).expand_as(rewards)
         labels_rewards = rewards.masked_fill(mask_fill_rewards, -100)
