@@ -636,7 +636,7 @@ class WorldModel(nn.Module):
 
 
 
-    def compute_loss(self, batch, tokenizer: Tokenizer=None, **kwargs: Any) -> LossWithIntermediateLosses:
+    def compute_loss(self, batch, target_tokenizer: Tokenizer=None, **kwargs: Any) -> LossWithIntermediateLosses:
 
         if len(batch['observations'][0, 0].shape) == 3:
             # obs is a 3-dimensional image
@@ -657,7 +657,9 @@ class WorldModel(nn.Module):
 
         # NOTE: 这里是需要梯度的
         # obs_tokens = tokenizer.encode(batch['observations'], should_preprocess=True).tokens  # (BL, K)
+        # with torch.no_grad():
         obs_embeddings = self.tokenizer.encode_to_obs_embeddings(batch['observations'], should_preprocess=True) # (B, C, H, W) -> (B, K, E)
+        # target_obs_embeddings = target_tokenizer.encode_to_obs_embeddings(batch['observations'], should_preprocess=True) # (B, C, H, W) -> (B, K, E)
 
 
         act_tokens = rearrange(batch['actions'], 'b l -> b l 1')
@@ -667,10 +669,13 @@ class WorldModel(nn.Module):
         outputs = self.forward({'obs_embeddings_and_act_tokens': (obs_embeddings, act_tokens)}, is_root=False)
 
 
-
         labels_observations, labels_rewards, labels_ends = self.compute_labels_world_model(obs_embeddings, batch['rewards'],
                                                                                            batch['ends'],
                                                                                            batch['mask_padding'])
+
+        # labels_observations, labels_rewards, labels_ends = self.compute_labels_world_model(target_obs_embeddings, batch['rewards'],
+        #                                                                                    batch['ends'],
+        #                                                                                    batch['mask_padding'])
 
         """
         >>> # Example of target with class probabilities

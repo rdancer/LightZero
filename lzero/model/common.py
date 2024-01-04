@@ -363,9 +363,9 @@ class RepresentationNetworkMLP(nn.Module):
         x = self.fc_representation(x)
         # print('no AvgL1Norm', x.max(), x.min())
 
-        # print('before AvgL1Norm', x.max(), x.min())
+        print('before AvgL1Norm', x.max(), x.min())
         x = AvgL1Norm(x)
-        # print('after AvgL1Norm', x.max(), x.min())
+        print('after AvgL1Norm', x.max(), x.min())
 
 
         return x

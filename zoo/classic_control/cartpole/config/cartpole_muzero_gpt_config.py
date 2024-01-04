@@ -47,7 +47,7 @@ cartpole_muzero_gpt_config = dict(
     # TODO: world_model.py decode_obs_tokens
     # TODO: tokenizer: lpips loss
 
-    exp_name=f'data_mz_gpt_ctree_1226/cartpole_muzero_gpt_ns{num_simulations}_upc{update_per_collect}-mur{model_update_ratio}_rr{reanalyze_ratio}_H{num_unroll_steps}_nlayers2_emd64_smallnet_bs{batch_size}_mcs500_bs{batch_size}_contembdings_lsd256_obsmseloss_trans-obs-emb-init0_rep-avgl1norm_p-v-condition-s_targetvalue-rep_seed0',
+    exp_name=f'data_mz_gpt_ctree_1226/cartpole_muzero_gpt_ns{num_simulations}_upc{update_per_collect}-mur{model_update_ratio}_rr{reanalyze_ratio}_H{num_unroll_steps}_nlayers2_emd64_smallnet_bs{batch_size}_mcs500_bs{batch_size}_contembdings_lsd256_obsmseloss_trans-obs-emb-init0_rep-avgl1norm_p-v-condition-s_targetvalue-rep_10k-then-rep-fixed_seed0',
 
     # exp_name=f'data_mz_gpt_ctree_1226/cartpole_muzero_gpt_ns{num_simulations}_upc{update_per_collect}-mur{model_update_ratio}_rr{reanalyze_ratio}_H{num_unroll_steps}_nlayers2_emd64_smallnet_bs{batch_size}_mcs500_bs{batch_size}_contembdings_lsd256_obsmseloss_trans-obs-emb-init0_rep-robustscaling-norm_seed0',
 
@@ -89,6 +89,7 @@ cartpole_muzero_gpt_config = dict(
             value_support_size=21,
             support_scale=10,
         ),
+        target_update_freq=100,
         cuda=True,
         # cuda=False,
         env_type='not_board_games',
