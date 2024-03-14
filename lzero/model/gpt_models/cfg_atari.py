@@ -106,8 +106,8 @@ cfg['world_model'] = {
 
                       # 'latent_recon_loss_weight':0.,
                       # 'perceptual_loss_weight':0.,
-                      'policy_entropy_weight': 0,
-                      # 'policy_entropy_weight': 1e-4,
+                      # 'policy_entropy_weight': 0,
+                      'policy_entropy_weight': 1e-4,
 
                       }
 from easydict import EasyDict

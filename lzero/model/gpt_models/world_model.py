@@ -712,6 +712,18 @@ class WorldModel(nn.Module):
         #     obs = obs_act_dict
         outputs_wm, latent_state = self.reset_from_initial_observations_v2(obs_act_dict) # root节点也有context
 
+        # 计算L1范数
+        l1_norm = torch.norm(latent_state.squeeze(1), p=1, dim=1)  # 计算每个向量的L1范数
+        average_l1_norm = torch.mean(l1_norm)  # 计算所有向量L1范数的平均值
+        # 计算L2范数
+        l2_norm = torch.norm(latent_state.squeeze(1), p=2, dim=1)  # 计算每个向量的L2范数
+        average_l2_norm = torch.mean(l2_norm)  # 计算所有向量L2范数的平均值
+        # 打印结果
+        print(f'Average L1 norm: {average_l1_norm}')
+        print(f'Average L2 norm: {average_l2_norm}')
+        # Average L1 norm: 96.0
+        # Average L2 norm: 8.440537452697754
+
         return outputs_wm.output_sequence, latent_state, outputs_wm.logits_rewards, outputs_wm.logits_policy, outputs_wm.logits_value
 
     """
@@ -1005,11 +1017,11 @@ class WorldModel(nn.Module):
         reconstructed_images = self.tokenizer.decode_to_obs(obs_embeddings)
 
         # Calculate the reconstruction loss
-        latent_recon_loss = self.tokenizer.reconstruction_loss(batch['observations'].reshape(-1, 4, 64, 64), reconstructed_images) # TODO: for stack=4
-        perceptual_loss = torch.tensor(0., device=batch['observations'].device, dtype=batch['observations'].dtype)  # for stack=4 gray obs
+        # latent_recon_loss = self.tokenizer.reconstruction_loss(batch['observations'].reshape(-1, 4, 64, 64), reconstructed_images) # TODO: for stack=4
+        # perceptual_loss = torch.tensor(0., device=batch['observations'].device, dtype=batch['observations'].dtype)  # for stack=4 gray obs
 
-        # latent_recon_loss = self.tokenizer.reconstruction_loss(batch['observations'].reshape(-1, 3, 64, 64), reconstructed_images) # TODO: for stack=1
-        # perceptual_loss = self.tokenizer.perceptual_loss(batch['observations'].reshape(-1, 3, 64, 64), reconstructed_images) # TODO: for stack=1
+        latent_recon_loss = self.tokenizer.reconstruction_loss(batch['observations'].reshape(-1, 3, 64, 64), reconstructed_images) # TODO: for stack=1
+        perceptual_loss = self.tokenizer.perceptual_loss(batch['observations'].reshape(-1, 3, 64, 64), reconstructed_images) # TODO: for stack=1
         
         # latent_recon_loss = torch.tensor(0., device=batch['observations'].device, dtype=batch['observations'].dtype)
         # perceptual_loss = torch.tensor(0., device=batch['observations'].device, dtype=batch['observations'].dtype)
