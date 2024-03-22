@@ -78,7 +78,7 @@ class MountainCarEnv(BaseEnv):
 
     def step(self, action: np.ndarray) -> BaseEnvTimestep:
         # Making sure that input action is of numpy ndarray
-        assert isinstance(action, np.ndarray), type(action)
+        # assert isinstance(action, np.ndarray), type(action)
 
         # Extract action as int, 0-dim array
         action = action.squeeze()
