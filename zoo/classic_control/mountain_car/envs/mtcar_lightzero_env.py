@@ -1,8 +1,8 @@
-from typing import Any, List, Union, Optional
+from typing import Optional
 import gym
 import numpy as np
 from ding.envs import BaseEnv, BaseEnvTimestep
-from ding.torch_utils import to_ndarray, to_list
+from ding.torch_utils import to_ndarray
 from ding.utils import ENV_REGISTRY
 
 
@@ -77,11 +77,9 @@ class MountainCarEnv(BaseEnv):
         return obs
 
     def step(self, action: np.ndarray) -> BaseEnvTimestep:
-        # Making sure that input action is of numpy ndarray
-        # assert isinstance(action, np.ndarray), type(action)
+        if isinstance(action, np.ndarray) and action.shape == (1,):
+            action = action.squeeze()  # 0-dim array
 
-        # Extract action as int, 0-dim array
-        action = action.squeeze()
         # Take a step of faith into the unknown!
         obs, rew, done, info = self._env.step(action)
 
