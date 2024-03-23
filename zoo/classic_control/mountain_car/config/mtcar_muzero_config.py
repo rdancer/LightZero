@@ -17,7 +17,7 @@ reanalyze_ratio = 0
 # ==============================================================
 
 mountain_car_muzero_config = dict(
-    exp_name=f'data_mtcar/mountain_car_muzero_ns{num_simulations}_upc{update_per_collect}-mur{model_update_ratio}_rr{reanalyze_ratio}_seed0',
+    exp_name=f'data_mtcar/mountain_car_muzero_ns{num_simulations}_upc{update_per_collect}-mur{model_update_ratio}_rr{reanalyze_ratio}_sslw0_gcv02_seed0',
     env=dict(
         env_name='MountainCar-v0',
         continuous=False,
@@ -58,7 +58,9 @@ mountain_car_muzero_config = dict(
         optim_type='Adam',
         lr_piecewise_constant_decay=False,
         learning_rate=0.003,
-        ssl_loss_weight=2,  # NOTE: default is 0.
+        # ssl_loss_weight=2,  # NOTE: default is 0.
+        ssl_loss_weight=0,  # NOTE: default is 0.
+        grad_clip_value=0.2,
         num_simulations=num_simulations,
         reanalyze_ratio=reanalyze_ratio,
         n_episode=n_episode,
