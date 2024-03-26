@@ -13,6 +13,31 @@ import torch
 import torch.nn as nn
 from ding.torch_utils import MLP, ResBlock
 from ding.utils import SequenceType
+import torch.nn.functional as F
+
+
+class SimNorm(nn.Module):
+    """
+    Simplicial normalization.
+    Adapted from https://arxiv.org/abs/2204.00616.
+    """
+
+    def __init__(self, simnorm_dim):
+        super().__init__()
+        self.dim = simnorm_dim
+
+    def forward(self, x):
+        shp = x.shape
+        # Ensure that there is at least one simplex to normalize across.
+        if shp[1] != 0:
+            x = x.view(*shp[:-1], -1, self.dim)
+            x = F.softmax(x, dim=-1)
+            return x.view(*shp)
+        else:
+            return x
+
+    def __repr__(self):
+        return f"SimNorm(dim={self.dim})"
 
 
 # use dataclass to make the output of network more convenient to use
@@ -230,6 +255,7 @@ class RepresentationNetworkMLP(nn.Module):
             activation: Optional[nn.Module] = nn.ReLU(inplace=True),
             last_linear_layer_init_zero: bool = True,
             norm_type: Optional[str] = 'BN',
+            group_size: int = 8,
     ) -> torch.Tensor:
         """
         Overview:
@@ -262,6 +288,7 @@ class RepresentationNetworkMLP(nn.Module):
             # last_linear_layer_init_zero=True is beneficial for convergence speed.
             last_linear_layer_init_zero=True,
         )
+        self.sim_norm = SimNorm(simnorm_dim=group_size)
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
         """
@@ -269,7 +296,9 @@ class RepresentationNetworkMLP(nn.Module):
             - x (:obj:`torch.Tensor`): :math:`(B, N)`, where B is batch size, N is the length of vector observation.
             - output (:obj:`torch.Tensor`): :math:`(B, hidden_channels)`, where B is batch size.
         """
-        return self.fc_representation(x)
+        x = self.fc_representation(x)
+        x = self.sim_norm(x)
+        return x
 
 
 class PredictionNetwork(nn.Module):
