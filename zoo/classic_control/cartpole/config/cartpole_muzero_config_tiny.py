@@ -11,11 +11,11 @@ from easydict import EasyDict
 # batch_size = 256
 # max_env_step = int(1e5)
 # reanalyze_ratio = 0
-collector_env_num = 2
-n_episode = 2
-evaluator_env_num = 2
-num_simulations = 2
-update_per_collect = 2
+collector_env_num = 1
+n_episode = 1
+evaluator_env_num = 1
+num_simulations = 1
+update_per_collect = 1
 batch_size = 2
 max_env_step = int(1e5)
 reanalyze_ratio = 0
