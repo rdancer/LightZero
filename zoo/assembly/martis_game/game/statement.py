@@ -93,6 +93,97 @@ class Statement:
         else:
             return f'{self.opcode_mnemonic.current()} {self.destination_index} {self.source_index1} {self.source_index2}'
 
+
+    def serialize_one_hot(self, cursor=False):
+        """Encode the full statement as a one-hot vector. The encoding uses 62 bits + 2 bits of padding. The encoding is as follows:
+        
+        bits | description
+        -----|------------
+         6   | opcode / label
+         3   | label type (Setup, Predict, Learn)
+         1   | cursor
+        10   | destination index
+         1   | cursor
+        10   | source index 1
+         1   | cursor
+        10   | source index 2
+         1   | cursor
+         8   | immediate value (for opcode 'let')
+        10   | increment (for opcode 'let')
+         2   | padding (unused)
+        """
+        WORD = 64 # bits
+        def one_hot(width: int, value: int) -> list[int]:
+            return [1 if i == value else 0 for i in range(width)]
+
+        def encode_floating_point(number: float) -> int:
+            """Encode a floating point value in eight (8) bits, in an encoding that is similar to IEEE 754 floating point encoding."""
+            # Very special cases
+            if number == 0:
+                return 0
+            elif number == 0.001:
+                return 1
+
+            if not 0.001 < abs(number) <= 10:
+                raise ValueError(f"Number out of range: {number}.")
+
+            sign_bit = 1 if number < 0 else 0
+            abs_number = abs(number)
+
+            # XXX Handle corner cases our encoding fails at
+            # For these intervals we would get ~50% error, because the encoding fails
+            if 0.48 < abs_number < 0.52 or 1.93 < abs_number < 2.23 or 7.75 < abs_number < 8:
+                candidate1 = abs_number * 0.95
+                candidate2 = abs_number * 1.04
+                abs_number = candidate1 if abs(candidate1 - abs_number) < abs(candidate2 - abs_number) else candidate2
+
+            exponent = int(np.floor(np.log2(abs_number)))
+            exponent_bias = 7  # Adjusting bias to support the range
+            biased_exponent = exponent + exponent_bias
+
+            mantissa = (abs_number / (2 ** exponent)) - 1
+            scaled_mantissa = round(mantissa * 8)  # Scale for 3-bit mantissa
+
+            encoded = (sign_bit << 7) | (biased_exponent << 3) | scaled_mantissa
+            return encoded
+
+        if self.label is not None:
+            enc = ([1] if cursor else [0]) + \
+                one_hot(6, 5) + (
+                [0, 0, 1] if self.label == "Setup" else
+                [0, 1, 0] if self.label == "Predict" else
+                [1, 0, 0] if self.label == "Learn" else
+                [0, 0, 0] # Invalid
+            ) + [0] * (WORD - (1 + 6 + 3))
+        elif self.opcode_mnemonic.current() == 'let':
+            # encode the constant as an array of eight bits
+            constant = encode_floating_point(self.immediate_value)
+            constant = [int(x) for x in bin(constant)[2:].zfill(8)]
+            enc = ([1] if cursor and self.cursor_position == 0 else [0]) \
+                 + one_hot(6, 0) \
+                 + [0] * 3 \
+                 + ([1] if cursor and self.cursor_position == 1 else [0]) \
+                 + one_hot(10, self.destination_index.current()) \
+                 + [0] * 11 \
+                 + [0] * 11 \
+                 + ([1] if cursor and self.cursor_position == 2 else [0]) \
+                 + constant \
+                 + one_hot(len(Increment.VALUES), Increment.VALUES.index(self.increment.current())) \
+                 + [0] * (WORD - (1 + 6 + 3 + (1+10)*3 + (1 + 8 + 10)))
+        else:
+            enc = ([1] if cursor and self.cursor_position == 0 else [0]) \
+                 + one_hot(6, Opcode.MNEMONICS.index(self.opcode_mnemonic.current())) \
+                 + [0] * 3 \
+                 + ([1] if cursor and self.cursor_position == 1 else [0]) \
+                 + one_hot(10, self.destination_index.current()) \
+                 + ([1] if cursor and self.cursor_position == 2 else [0]) \
+                 + one_hot(10, self.source_index1.current()) \
+                 + ([1] if cursor and self.cursor_position == 3 else [0]) \
+                 + one_hot(10, self.source_index2.current()) \
+                 + [0] * (WORD - (1 + 6 + 3 + (1+10)*3))
+        
+        return enc
+
     def get_cursor_display_column(self):
         """Return the display column corresponding to the current cursor position. Because our mnemonic is always 3 characters long, and our exceptions (label and let) can only take a cursor position 0 and [0, 1] respectively, we can do this uniformly for every operation."""
         # label Label:

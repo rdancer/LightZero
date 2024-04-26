@@ -15,7 +15,12 @@ class GameOverException(Exception):
 class GameOverProgramTooLongException(GameOverException):
     pass
 
+class GameCompleteException(Exception):
+    pass
+
 class Game:
+    VALID_INPUTS = ['l', 'h', 'k', 'j', ' ']
+
     def __init__(self, program: str):
         self.program = program
         self.lines = []
@@ -81,28 +86,10 @@ class Game:
             stdscr.move(self.current_line, self.lines[self.current_line].get_cursor_display_column())
             # Handle input
             ch = stdscr.getch()
-            if ch == ord('l'): #curses.KEY_RIGHT:
-                try:
-                    self.lines[self.current_line].move_cursor_right()
-                except NextStatementException as e:
-                    if self.current_line == len(self.lines) - 1:
-                        # Submit the program
-                        break
-                    self.current_line += 1
-            elif ch == ord('h'): #curses.KEY_LEFT:
-                if self.lines[self.current_line].label is None:
-                    del self.lines[self.current_line]
-                    self.current_line -= 1 # We won't ever underflow, as a valid program always contains a label as the 0th line
-            elif ch == ord('k'): #curses.KEY_UP:
-                if self.lines[self.current_line].label is None:
-                    self.lines[self.current_line].increment_token()
-            elif ch == ord('j'): #curses.KEY_DOWN:
-                if str(self.lines[self.current_line].opcode_mnemonic) == "let" and \
-                    self.lines[self.current_line].cursor_position == 2:
-                    self.lines[self.current_line].change_increment()
-            elif ch == ord(' '): # Spacebar
-                # Add a line after this one, and move the cursor to it
-                self.lines.insert(self.current_line + 1, Statement(DEFAULT_STATEMENT))
+            try:
+                self._step(ch)
+            except GameCompleteException:
+                break
 
         self.clean_up_curses(stdscr)
                 
@@ -111,6 +98,35 @@ class Game:
             f.writelines([statement.serialize_for_file() + '\n' for statement in self.lines])
         print(f"Wrote {sys.argv[1]}", file=sys.stderr)
 
+    def step(self, action: int):
+        ch = ord(self.VALID_INPUTS[action])
+        self._step(ch)
+    
+    def _step(self, ch: int):
+        if ch == ord('l'): #curses.KEY_RIGHT:
+            try:
+                self.lines[self.current_line].move_cursor_right()
+            except NextStatementException as e:
+                if self.current_line == len(self.lines) - 1:
+                    # Submit the program
+                    raise GameCompleteException()
+                self.current_line += 1
+        elif ch == ord('h'): #curses.KEY_LEFT:
+            if self.lines[self.current_line].label is None:
+                del self.lines[self.current_line]
+                self.current_line -= 1 # We won't ever underflow, as a valid program always contains a label as the 0th line
+        elif ch == ord('k'): #curses.KEY_UP:
+            if self.lines[self.current_line].label is None:
+                self.lines[self.current_line].increment_token()
+        elif ch == ord('j'): #curses.KEY_DOWN:
+            if str(self.lines[self.current_line].opcode_mnemonic) == "let" and \
+                self.lines[self.current_line].cursor_position == 2:
+                self.lines[self.current_line].change_increment()
+        elif ch == ord(' '): # Spacebar
+            # Add a line after this one, and move the cursor to it
+            self.lines.insert(self.current_line + 1, Statement(DEFAULT_STATEMENT))
+        if self.current_line > MAX_LINES:
+            raise GameOverProgramTooLongException()
     
     def __str__(self):
         s = "".join([statement.serialize_for_file() + "\n" for statement in self.lines])
@@ -119,6 +135,19 @@ class Game:
         s += f"Cursor: {self.lines[self.current_line].cursor_position}\n"
         return s
 
+    def state(self) -> list[int]:
+        state = [statement.serialize_one_hot() for statement in self.lines]
+        # Pad to MAX_LINES
+        word = len(state[0])
+        pad_length = MAX_LINES - len(state)
+        state += [[0] * word] * pad_length
+        # Flatten
+        state = [item for sublist in state for item in sublist]
+        return state
+
+    @property
+    def action_space_size(self) -> int:
+        return len(self.VALID_INPUTS)
 
 if __name__ == "__main__":
     with open(sys.argv[1], 'r') as f:
