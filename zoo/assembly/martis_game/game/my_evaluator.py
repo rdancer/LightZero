@@ -20,7 +20,7 @@ import sys
 import os
 
 try:
-    from evaluator import capture_stdout
+    from evaluator import evaluate
 except ImportError:
     # Dynamically adjust PYTHONPATH to find the module.
     current_directory = os.getcwd()
@@ -32,7 +32,7 @@ except ImportError:
         if os.path.basename(root_directory) == "AutoML_Zero_Game":
             if "evaluator.py" in os.listdir(root_directory):
                 sys.path.append(root_directory)
-                from evaluator import capture_stdout
+                from evaluator import evaluate
                 found = True
                 break
         root_directory = os.path.dirname(root_directory)
