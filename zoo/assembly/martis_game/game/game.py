@@ -170,6 +170,10 @@ class Game:
         state = [item for sublist in state for item in sublist]
         return state
 
+    def reset(self):
+        EMPTY_PROGRAM = """def Setup():\ndef Predict():\ndef Learn():"""
+        self.__init__(EMPTY_PROGRAM)
+
     @property
     def action_space_size(self) -> int:
         return len(self.VALID_INPUTS)
