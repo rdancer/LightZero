@@ -1,4 +1,5 @@
 import re
+import numpy as np
 
 from my_types import Opcode, Index, Increment, Label
 
@@ -71,7 +72,7 @@ class Statement:
     def serialize_for_file(self):
         # Serialize tokens back into a string using the operation format
         if self.operation == 'scalar_assign':
-            return f'{self.INDENT}s{self.destination_index} = {self.immediate_value:.3f}'
+            return f'{self.INDENT}s{self.destination_index} = {self.roundtrip_floating_point():.3f}'
         elif self.operation == 'dot_product':
             return f'{self.INDENT}s{self.destination_index} = dot(v{self.source_index1}, v{self.source_index2})'
         elif self.operation in ['subtraction', 'multiplication']:
@@ -93,6 +94,79 @@ class Statement:
         else:
             return f'{self.opcode_mnemonic.current()} {self.destination_index} {self.source_index1} {self.source_index2}'
 
+    def decode_floating_point(self, encoded: int) -> float:
+        # Very special cases
+        if encoded == 0:
+            return 0.0
+        elif encoded == 1:
+            return 0.001
+
+        sign_bit = encoded >> 7
+        biased_exponent = (encoded >> 3) & 0b1111
+        exponent = biased_exponent - 7  # Reversing the bias
+
+        scaled_mantissa = encoded & 0b111
+        mantissa = (scaled_mantissa / 8.0) + 1  # Reverting scale
+
+        number = (mantissa * (2 ** exponent)) * (-1 if sign_bit else 1)
+        return number
+
+    def encode_floating_point(self, number: float = None) -> int:
+        """
+        Encode a floating point value in eight (8) bits, in an encoding that is similar to IEEE 754 floating point encoding.
+        """
+        if number is None:
+            number = self.immediate_value
+        # Very special cases
+        if number == 0:
+            return 0
+        elif number == 0.001:
+            return 1
+
+        # if not 0.001 < abs(number) <= 10:
+        #     raise ValueError(f"Number out of range: {number}.")
+
+        sign_bit = 1 if number < 0 else 0
+        abs_number = abs(number)
+
+        # XXX Handle corner cases our encoding fails at
+        # For these intervals we would get ~50% error, because the encoding fails
+        if 0.48 < abs_number < 0.52 or 1.93 < abs_number < 2.23 or 7.75 < abs_number < 8:
+            candidate1 = abs_number * 0.95
+            candidate2 = abs_number * 1.04
+            abs_number = candidate1 if abs(candidate1 - abs_number) < abs(candidate2 - abs_number) else candidate2
+
+        exponent = int(np.floor(np.log2(abs_number)))
+        exponent_bias = 7  # Adjusting bias to support the range
+        biased_exponent = exponent + exponent_bias
+
+        mantissa = (abs_number / (2 ** exponent)) - 1
+        scaled_mantissa = round(mantissa * 8)  # Scale for 3-bit mantissa
+
+        encoded = (sign_bit << 7) | (biased_exponent << 3) | scaled_mantissa
+        return encoded
+
+    def roundtrip_floating_point(self, number: float = None, **kwargs):
+        """
+        Round-trip a floating point number through the encoding and decoding functions.
+        """
+        if "error" in kwargs:
+            only_error = kwargs["error"]
+        else:
+            only_error = False
+
+        if number is None:
+            number = self.immediate_value
+        encoded = self.encode_floating_point(number)
+        decoded = self.decode_floating_point(encoded)
+        if only_error:
+            if number == 0:
+                # Division by zero
+                return 0
+            else:
+                return (abs(decoded) - abs(number)) / abs(number)
+        else:
+            return decoded
 
     def serialize_one_hot(self, cursor=False):
         """Encode the full statement as a one-hot vector. The encoding uses 62 bits + 2 bits of padding. The encoding is as follows:
@@ -116,37 +190,6 @@ class Statement:
         def one_hot(width: int, value: int) -> list[int]:
             return [1 if i == value else 0 for i in range(width)]
 
-        def encode_floating_point(number: float) -> int:
-            """Encode a floating point value in eight (8) bits, in an encoding that is similar to IEEE 754 floating point encoding."""
-            # Very special cases
-            if number == 0:
-                return 0
-            elif number == 0.001:
-                return 1
-
-            if not 0.001 < abs(number) <= 10:
-                raise ValueError(f"Number out of range: {number}.")
-
-            sign_bit = 1 if number < 0 else 0
-            abs_number = abs(number)
-
-            # XXX Handle corner cases our encoding fails at
-            # For these intervals we would get ~50% error, because the encoding fails
-            if 0.48 < abs_number < 0.52 or 1.93 < abs_number < 2.23 or 7.75 < abs_number < 8:
-                candidate1 = abs_number * 0.95
-                candidate2 = abs_number * 1.04
-                abs_number = candidate1 if abs(candidate1 - abs_number) < abs(candidate2 - abs_number) else candidate2
-
-            exponent = int(np.floor(np.log2(abs_number)))
-            exponent_bias = 7  # Adjusting bias to support the range
-            biased_exponent = exponent + exponent_bias
-
-            mantissa = (abs_number / (2 ** exponent)) - 1
-            scaled_mantissa = round(mantissa * 8)  # Scale for 3-bit mantissa
-
-            encoded = (sign_bit << 7) | (biased_exponent << 3) | scaled_mantissa
-            return encoded
-
         if self.label is not None:
             enc = ([1] if cursor else [0]) + \
                 one_hot(6, 5) + (
@@ -157,7 +200,7 @@ class Statement:
             ) + [0] * (WORD - (1 + 6 + 3))
         elif self.opcode_mnemonic.current() == 'let':
             # encode the constant as an array of eight bits
-            constant = encode_floating_point(self.immediate_value)
+            constant = self.encode_floating_point()
             constant = [int(x) for x in bin(constant)[2:].zfill(8)]
             enc = ([1] if cursor and self.cursor_position == 0 else [0]) \
                  + one_hot(6, 0) \

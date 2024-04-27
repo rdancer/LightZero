@@ -1,4 +1,5 @@
 from easydict import EasyDict
+from game.game import Game as MartisGame
 
 # ==============================================================
 # begin of the most frequently changed config specified by the user
@@ -28,8 +29,8 @@ martis_game_stochastic_muzero_config = dict(
     ),
     policy=dict(
         model=dict(
-            observation_shape=4,
-            action_space_size=2,
+            observation_shape=(20, 64), # Would (3, 7, 62) be better, or (1280, )?
+            action_space_size=MartisGame.action_space_size,
             chance_space_size=2,
             model_type='mlp',
             lstm_hidden_size=128,

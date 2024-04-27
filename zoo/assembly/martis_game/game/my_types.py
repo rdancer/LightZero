@@ -3,7 +3,7 @@ class WraparoundIterator:
         if len(data) == 0:
             raise ValueError("empty data -- data must have at least one member")
         self.data = data
-        self.index = -1
+        self.index = 0
 
     def __next__(self):
         if not self.data:
@@ -21,7 +21,7 @@ class WraparoundIterator:
     def current(self):
         if not self.data:
             raise StopIteration
-        return self.data[0 if self.index == -1 else self.index]
+        return self.data[self.index]
     
     def set(self, value):
         if value not in self.data:

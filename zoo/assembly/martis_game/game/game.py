@@ -83,6 +83,8 @@ class Game:
             if str(self.lines[self.current_line].opcode_mnemonic) == "let" and \
                     self.lines[self.current_line].cursor_position == 2:
                 stdscr.addstr(f"\n\nIncrement: {self.lines[self.current_line].increment}")
+                stdscr.addstr(f"\nError: {self.lines[self.current_line].roundtrip_floating_point(None, error=True)*100:.2f}%")
+                stdscr.addstr(f"\nActual: {self.lines[self.current_line].roundtrip_floating_point():.3f}")
             stdscr.move(self.current_line, self.lines[self.current_line].get_cursor_display_column())
             # Handle input
             ch = stdscr.getch()
