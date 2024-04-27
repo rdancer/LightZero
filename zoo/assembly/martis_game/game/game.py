@@ -23,8 +23,9 @@ class GameCompleteException(Exception):
 class Game:
     VALID_INPUTS = ['l', 'h', 'k', 'j', ' ']
     NUM_ACTIONS = len(VALID_INPUTS)
+    EMPTY_PROGRAM = """def Setup():\ndef Predict():\ndef Learn():"""
 
-    def __init__(self, program: str):
+    def __init__(self, program: str = EMPTY_PROGRAM):
         self.program = program
         self.lines = []
         self.current_line = 0
@@ -171,8 +172,7 @@ class Game:
         return state
 
     def reset(self):
-        EMPTY_PROGRAM = """def Setup():\ndef Predict():\ndef Learn():"""
-        self.__init__(EMPTY_PROGRAM)
+        self.__init__(self.EMPTY_PROGRAM)
 
     @property
     def action_space_size(self) -> int:

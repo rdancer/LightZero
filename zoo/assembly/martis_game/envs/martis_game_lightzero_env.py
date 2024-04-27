@@ -2,6 +2,8 @@ import copy
 from datetime import datetime
 from typing import Union, Optional, Dict
 
+from game.game import Game as MartisGame
+
 import gymnasium as gym
 import numpy as np
 from ding.envs import BaseEnv, BaseEnvTimestep
@@ -15,8 +17,6 @@ from easydict import EasyDict
 class MartisGameEnv(BaseEnv):
     """
     LightZero version of Marti's Game environment. Based on the classic Cartpole environment. This version uses discretized environment, in particular the decimal constant is entered by repeated presses of the arrow keys, much like one would set the time on a Casio wrist watch.
-
-    Optional visualisation is performed by writing to a FIFO file, which you can then cat to a second terminal. The FIFO file is created in the current directory and is named `state.fifo`.
     """
 
     config = dict(
@@ -41,45 +41,22 @@ class MartisGameEnv(BaseEnv):
         self._init_flag = False
         self._continuous = False
         self._replay_path = cfg.replay_path
-        self._observation_space = gym.spaces.Box(
-            low=np.array([-4.8, float("-inf"), -0.42, float("-inf")]),
-            high=np.array([4.8, float("inf"), 0.42, float("inf")]),
-            shape=(4,),
-            dtype=np.float32
-        )
-        self._action_space = gym.spaces.Discrete(2)
+        self._observation_space = gym.spaces.MultiBinary(1280) # maybe should be ((20, 64))
+        self._action_space = gym.spaces.Discrete(MartisGame.NUM_ACTIONS)
         self._action_space.seed(0)  # default seed
         self._reward_space = gym.spaces.Box(low=0.0, high=1.0, shape=(1,), dtype=np.float32)
+
+        self.game = MartisGame()
 
     def reset(self) -> Dict[str, np.ndarray]:
         """
         Reset the environment. If it hasn't been initialized yet, this method also handles that. It also handles seeding
         if necessary. Returns the first observation.
         """
-        if not self._init_flag:
-            self._env = gym.make('CartPole-v0', render_mode="rgb_array")
-            if self._replay_path is not None:
-                timestamp = datetime.now().strftime("%Y%m%d%H%M%S")
-                video_name = f'{self._env.spec.id}-video-{timestamp}'
-                self._env = gym.wrappers.RecordVideo(
-                    self._env,
-                    video_folder=self._replay_path,
-                    episode_trigger=lambda episode_id: True,
-                    name_prefix=video_name
-                )
-            if hasattr(self._cfg, 'obs_plus_prev_action_reward') and self._cfg.obs_plus_prev_action_reward:
-                self._env = ObsPlusPrevActRewWrapper(self._env)
-            self._init_flag = True
-        if hasattr(self, '_seed') and hasattr(self, '_dynamic_seed') and self._dynamic_seed:
-            np_seed = 100 * np.random.randint(1, 1000)
-            self._seed = self._seed + np_seed
-            self._action_space.seed(self._seed)
-            obs, _ = self._env.reset(seed=self._seed)
-        elif hasattr(self, '_seed'):
-            self._action_space.seed(self._seed)
-            obs, _ = self._env.reset(seed=self._seed)
-        else:
-            obs, _ = self._env.reset()
+
+        self.game.reset()
+        obs = self.game.state()
+
         self._observation_space = self._env.observation_space
         self._eval_episode_return = 0
         obs = to_ndarray(obs)
@@ -111,7 +88,7 @@ class MartisGameEnv(BaseEnv):
         if isinstance(action, np.ndarray) and action.shape == (1,):
             action = action.squeeze()  # 0-dim array
 
-        obs, rew, terminated, truncated, info = self._env.step(action)
+        obs, rew, terminated, truncated, info = self.game.step(action)
         done = terminated or truncated
 
         self._eval_episode_return += rew
