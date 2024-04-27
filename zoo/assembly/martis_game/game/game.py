@@ -4,10 +4,12 @@ import os
 import signal
 
 from statement import Statement, NextStatementException
+from my_evaluator import my_evaluate as evaluate
 
 DEFAULT_STATEMENT = "let s0 = 0.000" # This is what gets inserted as a new statement; chaning this will change the shape of the search space
 MAX_MOVES = 500 # Force a game end after this many moves, to prevent infinitely looped paths through the search space
 MAX_LINES = 20 # The game is lost immediately once no combination of valid moves can result in a program that is within the line limit, i.e. when the number of lines behind the cursor has reached MAX_LINES + 1
+MAX_LINE_PENALTY = 0.3 # Penalty per additional line is MAX_LINE_PENALTY / MAX_LINES. This is to motivate concise programs. Should be set low enough to allow exploring the search space.
 
 class GameOverException(Exception):
     pass
@@ -20,6 +22,7 @@ class GameCompleteException(Exception):
 
 class Game:
     VALID_INPUTS = ['l', 'h', 'k', 'j', ' ']
+    NUM_ACTIONS = len(VALID_INPUTS)
 
     def __init__(self, program: str):
         self.program = program
@@ -100,9 +103,26 @@ class Game:
             f.writelines([statement.serialize_for_file() + '\n' for statement in self.lines])
         print(f"Wrote {sys.argv[1]}", file=sys.stderr)
 
-    def step(self, action: int):
+    def step(self, action: int): # obs, rew, terminated, truncated, info
+        observation, reward, terminated, truncated, info = None, 0, False, False, {}
         ch = ord(self.VALID_INPUTS[action])
-        self._step(ch)
+        try:
+            self._step(ch)
+            observation = self.state()
+        except GameCompleteException:
+            terminated = True
+            score = self.score()
+            per_line_penalty = MAX_LINE_PENALTY / (MAX_LINES - 3)
+            penalty = (len(self.lines) - 3) * per_line_penalty
+            penalty *= score # Normalize the penalty to the score; this way the score is the primary reward signal; we want the penalty to be a tie-breaker and a nudge towards shorter programs, while allowing longer and better programs
+            reward = score - penalty
+        except GameOverException:
+            terminated = True
+            truncated = True
+            per_line_penalty = MAX_LINE_PENALTY / (MAX_LINES - 3)
+            reward = - (len(self.lines) - 3) * per_line_penalty # Penalize for each added program line (i.e. each line that is not a section label)
+        observation = self.state()
+        return observation, reward, terminated, truncated, info
     
     def _step(self, ch: int):
         if ch == ord('l'): #curses.KEY_RIGHT:
@@ -130,8 +150,11 @@ class Game:
         if self.current_line > MAX_LINES:
             raise GameOverProgramTooLongException()
     
+    def program(self) -> str:
+        return "".join([statement.serialize_for_file() + "\n" for statement in self.lines])
+
     def __str__(self):
-        s = "".join([statement.serialize_for_file() + "\n" for statement in self.lines])
+        s = self.program()
         s += "\n"
         s += f"Current line: {self.current_line}\n"
         s += f"Cursor: {self.lines[self.current_line].cursor_position}\n"
@@ -150,6 +173,10 @@ class Game:
     @property
     def action_space_size(self) -> int:
         return len(self.VALID_INPUTS)
+
+    def score(self) -> float:
+        return evaluate(self.program())
+        
 
 if __name__ == "__main__":
     with open(sys.argv[1], 'r') as f:
