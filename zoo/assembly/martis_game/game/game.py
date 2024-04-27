@@ -161,7 +161,7 @@ class Game:
         return s
 
     def state(self) -> list[int]:
-        state = [statement.serialize_one_hot() for statement in self.lines]
+        state = [statement.serialize_one_hot(cursor=(i==self.current_line)) for i, statement in enumerate(self.lines)]
         # Pad to MAX_LINES
         word = len(state[0])
         pad_length = MAX_LINES - len(state)
