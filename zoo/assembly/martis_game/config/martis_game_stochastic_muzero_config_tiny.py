@@ -1,5 +1,5 @@
 from easydict import EasyDict
-from game.game import Game as MartisGame, MAX_LINES
+from game import Game as MartisGame, MAX_LINES
 
 # ==============================================================
 # begin of the most frequently changed config specified by the user

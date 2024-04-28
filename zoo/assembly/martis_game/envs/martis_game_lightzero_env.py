@@ -2,7 +2,7 @@ import copy
 from datetime import datetime
 from typing import Union, Optional, Dict
 
-from game.game import Game as MartisGame
+from game import Game as MartisGame
 
 import gymnasium as gym
 import numpy as np
