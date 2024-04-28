@@ -85,7 +85,7 @@ def my_evaluate(program: str) -> float:
     """
     # The wrapped function is called as evaluate(program: str) -> None # prints to stdout
     # We need to return the float value instead of printing it.
-    s = capture_stdout(lambda: capture_stdout(program))
+    s = capture_stdout(lambda: evaluate(program))
     score = parse_output(s)
     if score < 0.0:
         raise ValueError(f"Score outside of expected range 0.0~1.0 (negative score): {score}")
