@@ -87,9 +87,7 @@ def my_evaluate(program: str) -> float:
     # We need to return the float value instead of printing it.
     s = capture_stdout(lambda: capture_stdout(program))
     score = parse_output(s)
-    if score == KNOWN_BAD_SCORE:
-        raise ValueError(f"Known bad score detected: {score}")
-    elif score < 0.0:
+    if score < 0.0:
         raise ValueError(f"Score outside of expected range 0.0~1.0 (negative score): {score}")
     elif score > 1.0:
         raise ValueError(f"Score outside of expected range 0.0~1.0 (greater than 1.0): {score}")

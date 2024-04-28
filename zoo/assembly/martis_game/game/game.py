@@ -151,11 +151,11 @@ class Game:
         if self.current_line > MAX_LINES:
             raise GameOverProgramTooLongException()
     
-    def program(self) -> str:
+    def _program(self) -> str:
         return "".join([statement.serialize_for_file() + "\n" for statement in self.lines])
 
     def __str__(self):
-        s = self.program()
+        s = self._program()
         s += "\n"
         s += f"Current line: {self.current_line}\n"
         s += f"Cursor: {self.lines[self.current_line].cursor_position}\n"
@@ -163,6 +163,9 @@ class Game:
 
     def state(self) -> list[int]:
         state = [statement.serialize_one_hot(cursor=(i==self.current_line)) for i, statement in enumerate(self.lines)]
+        # Truncate to MAX_LINES
+        # Note: when this is not a no-op, we're Game Over anyway
+        state = state[:MAX_LINES]
         # Pad to MAX_LINES
         word = len(state[0])
         pad_length = MAX_LINES - len(state)
@@ -177,7 +180,7 @@ class Game:
     action_space_size: int = len(VALID_INPUTS)
 
     def score(self) -> float:
-        return evaluate(self.program())
+        return evaluate(self._program())
         
 
 if __name__ == "__main__":
