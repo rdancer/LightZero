@@ -174,9 +174,7 @@ class Game:
     def reset(self):
         self.__init__(self.EMPTY_PROGRAM)
 
-    @property
-    def action_space_size(self) -> int:
-        return len(self.VALID_INPUTS)
+    action_space_size: int = len(VALID_INPUTS)
 
     def score(self) -> float:
         return evaluate(self.program())
