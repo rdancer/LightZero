@@ -29,7 +29,7 @@ martis_game_stochastic_muzero_config = dict(
     ),
     policy=dict(
         model=dict(
-            observation_shape=(MAX_LINES * 64, ), # Would (MAX_LINES, 64) or (3, 7, 62) be better?
+            observation_shape=MAX_LINES * 64, # Would (MAX_LINES, 64) or (3, 7, 62) be better? -- No, apparently this must be an int, not a tuple. Perhaps this has something to do with the observation space having been changed from Box to MultiBinary?
             action_space_size=MartisGame.action_space_size,
             chance_space_size=2,
             model_type='mlp',
