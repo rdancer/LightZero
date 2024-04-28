@@ -2,7 +2,7 @@ import copy
 from datetime import datetime
 from typing import Union, Optional, Dict
 
-from game import Game as MartisGame
+from game import Game as MartisGame, MAX_LINES
 
 import gymnasium as gym
 import numpy as np
@@ -33,6 +33,10 @@ class MartisGameEnv(BaseEnv):
         cfg.cfg_type = cls.__name__ + 'Dict'
         return cfg
 
+    def my_space(self) -> gym.spaces.Space:
+        SPACE_SHAPE = MAX_LINES * 64 # maybe should be (MAX_LINES, 64)
+        return gym.spaces.MultiBinary(SPACE_SHAPE)
+    
     def __init__(self, cfg: dict = {}) -> None:
         """
         Initialize the environment with a configuration dictionary. Sets up spaces for observations, actions, and rewards.
@@ -41,7 +45,7 @@ class MartisGameEnv(BaseEnv):
         self._init_flag = False
         self._continuous = False
         self._replay_path = cfg.replay_path
-        self._observation_space = gym.spaces.MultiBinary(1280) # maybe should be ((20, 64))
+        self._observation_space = gym.spaces.MultiBinary(1280) 
         self._action_space = gym.spaces.Discrete(MartisGame.NUM_ACTIONS)
         self._action_space.seed(0)  # default seed
         self._reward_space = gym.spaces.Box(low=0.0, high=1.0, shape=(1,), dtype=np.float32)
@@ -57,7 +61,8 @@ class MartisGameEnv(BaseEnv):
         self.game.reset()
         obs = self.game.state()
 
-        self._observation_space = self._env.observation_space
+        # self._observation_space = self._env.observation_space
+        self._observation_space = self.my_space()
         self._eval_episode_return = 0
         obs = to_ndarray(obs)
 
@@ -105,7 +110,8 @@ class MartisGameEnv(BaseEnv):
         Close the environment, and set the initialization flag to False.
         """
         if self._init_flag:
-            self._env.close()
+            # self._env.close()
+            pass
         self._init_flag = False
 
     def seed(self, seed: int, dynamic_seed: bool = True) -> None:
