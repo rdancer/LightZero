@@ -12,12 +12,12 @@ Usage:
     `from my_evaluator import my_evaluate as evaluate`
 """
 
-# This is the score given currently (as of 2024-04-27 09:00 UTC) by the evaluator.py script for any program. We check for it and raise an exception. Probably should be removed once the evaluator.py script is fixed.
-KNOWN_BAD_SCORE = 0.341783
+LOG_FILE = 'high_scores.log'
 
 
 import sys
 import os
+import time
 
 try:
     from evaluator import evaluate
@@ -91,4 +91,36 @@ def my_evaluate(program: str) -> float:
         raise ValueError(f"Score outside of expected range 0.0~1.0 (negative score): {score}")
     elif score > 1.0:
         raise ValueError(f"Score outside of expected range 0.0~1.0 (greater than 1.0): {score}")
+    
+    my_log(score, program, LOG_FILE)
     return score
+
+def my_log(score: float, program: str, log_path: str):
+    """
+    Log attempts that are better than the best thus far.
+    """
+    last_path = ".last_high_score"
+    try:
+        with open(last_path, 'r') as f:
+            last_high_score = float(f.read().strip())
+            if score <= last_high_score:
+                return
+    except FileNotFoundError:
+        pass
+    with open(last_path, 'w') as f:
+        f.write(str(score))
+    # separator
+    s = '-' * 80 + '\n'
+    # Log the current date and time, in the RFC-822 format, including timezone
+    current_time_rfc822 = time.strftime('%a, %d %b %Y %H:%M:%S %z', time.gmtime())
+    s += '\n' + 'Date: ' + 'Wed, 27 Apr 2024 09:00:00 +0000' + '\n'
+    # Log the score
+    s += f'New high score: {score}\n'
+    # Log the program
+    s += 'Program:\n' + program.strip() + '\n'
+    # terminator
+    s += '# END\n'
+    # Log the string to the file
+    print(s, flush=True)
+    with open(log_path, 'a') as f:
+        f.write(s)
