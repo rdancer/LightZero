@@ -123,11 +123,12 @@ class Statement:
         elif number == 0.001:
             return 1
 
-        # if not 0.001 < abs(number) <= 10:
-        #     raise ValueError(f"Number out of range: {number}.")
-
         sign_bit = 1 if number < 0 else 0
         abs_number = abs(number)
+
+        # if not 0.001 < abs(number) <= 10:
+        #     raise ValueError(f"Number out of range: {number}.")
+        abs_number = max(0.001, min(10, abs_number))
 
         # XXX Handle corner cases our encoding fails at
         # For these intervals we would get ~50% error, because the encoding fails
