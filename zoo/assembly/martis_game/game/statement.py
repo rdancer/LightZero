@@ -103,7 +103,7 @@ class Statement:
 
         sign_bit = encoded >> 7
         biased_exponent = (encoded >> 3) & 0b1111
-        exponent = biased_exponent - 7  # Reversing the bias
+        exponent = biased_exponent - 10  # Reversing the bias
 
         scaled_mantissa = encoded & 0b111
         mantissa = (scaled_mantissa / 8.0) + 1  # Reverting scale
@@ -111,7 +111,7 @@ class Statement:
         number = (mantissa * (2 ** exponent)) * (-1 if sign_bit else 1)
         return number
 
-    def encode_floating_point(self, number: float = None) -> int:
+    def encode_floating_point(self, number: float = None, debug: bool = False) -> int:
         """
         Encode a floating point value in eight (8) bits, in an encoding that is similar to IEEE 754 floating point encoding.
         """
@@ -138,7 +138,7 @@ class Statement:
             abs_number = candidate1 if abs(candidate1 - abs_number) < abs(candidate2 - abs_number) else candidate2
 
         exponent = int(np.floor(np.log2(abs_number)))
-        exponent_bias = 7  # Adjusting bias to support the range
+        exponent_bias = 10  # Adjusting bias to support the range
         biased_exponent = exponent + exponent_bias
         biased_exponent = min(0b1111, biased_exponent) # clip to 4 bits
 
@@ -146,6 +146,9 @@ class Statement:
         scaled_mantissa = round(mantissa * 8)  # Scale for 3-bit mantissa
         scaled_mantissa = min(0b111, scaled_mantissa)  # clip to 3 bits (this is a no-op, unless we have a bug somewhere)
 
+        if debug:
+            print(f"sign_bit: {sign_bit}, biased_exponent: {biased_exponent}, scaled_mantissa: {scaled_mantissa}")
+            print(f"sign_bit: {bin(sign_bit)}, biased_exponent: {bin(biased_exponent)}, scaled_mantissa: {bin(scaled_mantissa)}")
         encoded = (sign_bit << 7) | (biased_exponent << 3) | scaled_mantissa
         return encoded
 
