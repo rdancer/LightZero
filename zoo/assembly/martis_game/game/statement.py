@@ -140,9 +140,11 @@ class Statement:
         exponent = int(np.floor(np.log2(abs_number)))
         exponent_bias = 7  # Adjusting bias to support the range
         biased_exponent = exponent + exponent_bias
+        biased_exponent = min(0b1111, biased_exponent) # clip to 4 bits
 
         mantissa = (abs_number / (2 ** exponent)) - 1
         scaled_mantissa = round(mantissa * 8)  # Scale for 3-bit mantissa
+        scaled_mantissa = min(0b111, scaled_mantissa)  # clip to 3 bits (this is a no-op, unless we have a bug somewhere)
 
         encoded = (sign_bit << 7) | (biased_exponent << 3) | scaled_mantissa
         return encoded
@@ -202,7 +204,10 @@ class Statement:
         elif self.opcode_mnemonic.current() == 'let':
             # encode the constant as an array of eight bits
             constant = self.encode_floating_point()
-            constant = [int(x) for x in bin(constant)[2:].zfill(8)]
+            try:
+                constant = [int(x) for x in bin(constant)[2:].zfill(8)]
+            except:
+                raise ValueError(f"Invalid constant {constant} for opcode 'let': bin(constant): {bin(constant)}, self.immediate_value: {self.immediate_value}, statement: {self.serialize_for_file()}")
             enc = ([1] if cursor and self.cursor_position == 0 else [0]) \
                  + one_hot(6, 0) \
                  + [0] * 3 \
@@ -249,7 +254,17 @@ class Statement:
         else:
             if self.opcode_mnemonic.current() == 'let':
                 if self.cursor_position == 2:
-                    self.immediate_value += self.increment.current()
+                    new_value = self.immediate_value + self.increment.current()
+                    new_sign = 1 if new_value >= 0 else -1
+                    abs_new_value = abs(new_value)
+                    if new_value == 0:
+                        pass
+                    elif abs_new_value < 0.001:
+                        abs_new_value = 0.001
+                    elif abs_new_value > 10:
+                        abs_new_value = 10
+                    # For certain values, the encoding error is very large for some values, certainly larger than the smaller increment, which is why we don't use self.roundtrip_floating_point() here
+                    self.immediate_value = new_sign * abs_new_value
                 else:
                     raise RuntimeError(f"Invalid cursor position {self.cursor_position} for opcode 'let'")
             else:
