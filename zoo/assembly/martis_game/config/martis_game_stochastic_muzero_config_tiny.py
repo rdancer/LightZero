@@ -4,13 +4,13 @@ from game import Game as MartisGame, MAX_LINES
 # ==============================================================
 # begin of the most frequently changed config specified by the user
 # ==============================================================
-collector_env_num = 1
-n_episode = 1
-evaluator_env_num = 1
-num_simulations = 1
-update_per_collect = 1
-batch_size = 2
-max_env_step = int(1e5)
+collector_env_num = 8
+n_episode = 8
+evaluator_env_num = 5
+num_simulations = 25
+update_per_collect = 50
+batch_size = 256
+max_env_step = int(2e5)
 reanalyze_ratio = 0
 # ==============================================================
 # end of the most frequently changed config specified by the user
