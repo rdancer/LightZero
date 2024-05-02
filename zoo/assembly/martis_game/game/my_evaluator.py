@@ -104,7 +104,10 @@ def my_log(score: float, program: str, log_path: str):
         with open(last_path, 'r') as f:
             last_high_score = float(f.read().strip())
             if score <= last_high_score:
-                return
+                if 'FORCE_LOG_EVERY_ITERATION' in os.environ:
+                    pass
+                else:
+                    return
     except FileNotFoundError:
         pass
     with open(last_path, 'w') as f:
