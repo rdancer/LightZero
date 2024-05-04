@@ -117,7 +117,8 @@ class Game:
 
     def step(self, action: int): # obs, rew, terminated, truncated, info
         observation, reward, terminated, truncated, info = None, 0, False, False, {}
-        assert isinstance(action, int) and 0 <= action < len(VALID_INPUTS), (
+        assert isinstance(action, int), f"Action is not an int -- type: {type(action)}; value: >>{action}<<"
+        assert 0 <= action < len(VALID_INPUTS), (
             f"Index {action} out of bounds for VALID_INPUTS"
         )
         if DEBUG:
