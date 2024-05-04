@@ -117,7 +117,9 @@ class Game:
 
     def step(self, action: int): # obs, rew, terminated, truncated, info
         observation, reward, terminated, truncated, info = None, 0, False, False, {}
-        assert(action in self.VALID_INPUTS), f"Invalid action: >>{action}<<"
+        assert isinstance(action, int) and 0 <= action < len(VALID_INPUTS), (
+            f"Index {action} out of bounds for VALID_INPUTS"
+        )
         if DEBUG:
             print(f"<{self.INPUT_KEY_NAMES[self.VALID_INPUTS[action]]}>", end="", flush=True)
         ch = ord(self.VALID_INPUTS[action])
