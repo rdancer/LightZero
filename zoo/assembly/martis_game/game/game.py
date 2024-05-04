@@ -119,7 +119,7 @@ class Game:
         observation, reward, terminated, truncated, info = None, 0, False, False, {}
         assert(action in self.VALID_INPUTS), f"Invalid action: >>{action}<<"
         if DEBUG:
-            print(f"<{self.INPUT_KEY_NAMES[action]}>", end="", flush=True)
+            print(f"<{self.INPUT_KEY_NAMES[self.VALID_INPUTS[action]]}>", end="", flush=True)
         ch = ord(self.VALID_INPUTS[action])
         try:
             self._step(ch)
