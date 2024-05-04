@@ -116,7 +116,7 @@ def my_log(score: float, program: str, log_path: str):
     s = '-' * 80 + '\n'
     # Log the current date and time, in the RFC-822 format, including timezone
     current_time_rfc822 = time.strftime('%a, %d %b %Y %H:%M:%S %z', time.gmtime())
-    s += '\n' + 'Date: ' + 'Wed, 27 Apr 2024 09:00:00 +0000' + '\n'
+    s += '\n' + 'Date: ' + current_time_rfc822 + '\n'
     # Log the score
     s += f'New high score: {score}\n'
     # Log the program
