@@ -20,6 +20,9 @@ class GameOverException(Exception):
 class GameOverProgramTooLongException(GameOverException):
     pass
 
+class GameOverMaxEnvSteps(GameOverException):
+    pass
+
 class GameCompleteException(Exception):
     pass
 
@@ -41,6 +44,7 @@ class Game:
         self.program = program
         self.lines = []
         self.current_line = 0
+        self.steps = []
         for line in program.split('\n'):
             # Strip comments
             if '#' in line:
@@ -117,7 +121,7 @@ class Game:
         print(f"Wrote {sys.argv[1]}", file=sys.stderr)
 
     def step(self, action: int): # obs, rew, terminated, truncated, info
-        observation, reward, terminated, truncated, info = None, 0, False, False, {}
+        observation, reward, terminated, truncated, info = None, 0, False, False, {"steps":self.steps}
         assert isinstance(action, (int, np.integer)), f"Action is not an int -- type: {type(action)}; value: >>{action}<<"
         assert 0 <= action < len(self.VALID_INPUTS), (
             f"Index {action} out of bounds for VALID_INPUTS"
@@ -136,6 +140,8 @@ class Game:
             penalty *= score # Normalize the penalty to the score; this way the score is the primary reward signal; we want the penalty to be a tie-breaker and a nudge towards shorter programs, while allowing longer and better programs
             reward = score - penalty
         except GameOverException:
+            if DEBUG:
+                print(f"\nDEBUG [GameOverException] Game truncated after {len(self.steps)} moves.")
             terminated = True
             truncated = True
             per_line_penalty = MAX_LINE_PENALTY / (MAX_LINES - 3)
@@ -144,6 +150,9 @@ class Game:
         return observation, reward, terminated, truncated, info
     
     def _step(self, ch: int):
+        self.steps.append(self.INPUT_KEY_NAMES[chr(ch)])
+        if 'MAX_ENV_STEP' in os.environ and len(self.steps) > int(os.environ['MAX_ENV_STEP']):
+            raise GameOverMaxEnvSteps(f"Max steps exceeded: {len(self.steps)}")
         if ch == ord('l'): #curses.KEY_RIGHT:
             try:
                 self.lines[self.current_line].move_cursor_right()

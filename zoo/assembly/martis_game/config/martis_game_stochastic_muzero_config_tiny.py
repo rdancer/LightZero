@@ -1,5 +1,6 @@
 from easydict import EasyDict
 from game import Game as MartisGame, MAX_LINES
+import os
 
 # ==============================================================
 # begin of the most frequently changed config specified by the user
@@ -10,7 +11,7 @@ evaluator_env_num = 5
 num_simulations = 25
 update_per_collect = 50
 batch_size = 256
-max_env_step = int(1e5)
+max_env_step = int(os.environ['MAX_ENV_STEP']) if 'MAX_ENV_STEP' in os.environ else int(1e5)
 reanalyze_ratio = 0
 # ==============================================================
 # end of the most frequently changed config specified by the user
