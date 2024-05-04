@@ -11,6 +11,8 @@ MAX_MOVES = 500 # Force a game end after this many moves, to prevent infinitely 
 MAX_LINES = 20 # The game is lost immediately once no combination of valid moves can result in a program that is within the line limit, i.e. when the number of lines behind the cursor has reached MAX_LINES + 1
 MAX_LINE_PENALTY = 0.3 # Penalty per additional line is MAX_LINE_PENALTY / MAX_LINES. This is to motivate concise programs. Should be set low enough to allow exploring the search space.
 
+DEBUG = 'DEBUG' in os.environ and os.environ['DEBUG'].lower() != 'false'
+
 class GameOverException(Exception):
     pass
 
@@ -22,6 +24,15 @@ class GameCompleteException(Exception):
 
 class Game:
     VALID_INPUTS = ['l', 'h', 'k', 'j', ' ']
+    INPUT_KEY_NAMES = {
+        'l': "RIGHT",
+        'h': "LEFT",
+        'k': "UP",
+        'j': "DOWN",
+        ' ': "SPACE"
+    }
+    assert all(x == y for x, y in zip(VALID_INPUTS, INPUT_KEY_NAMES.keys())), \
+           f"{__class__.__name__}: VALID_INPUTS do not match INPUT_KEY_NAMES, please fix"
     NUM_ACTIONS = len(VALID_INPUTS)
     EMPTY_PROGRAM = """def Setup():\ndef Predict():\ndef Learn():"""
 
@@ -106,6 +117,9 @@ class Game:
 
     def step(self, action: int): # obs, rew, terminated, truncated, info
         observation, reward, terminated, truncated, info = None, 0, False, False, {}
+        assert(action in self.VALID_INPUTS), f"Invalid action: >>{action}<<"
+        if DEBUG:
+            print(f"<{self.INPUT_KEY_NAMES[action]}>", end="", flush=True)
         ch = ord(self.VALID_INPUTS[action])
         try:
             self._step(ch)
