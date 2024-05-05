@@ -9,7 +9,7 @@ from my_evaluator import my_evaluate as evaluate
 
 DEFAULT_STATEMENT = "let s0 = 0.000" # This is what gets inserted as a new statement; chaning this will change the shape of the search space
 MAX_MOVES = int(os.environ['MAX_ENV_STEPS']) if 'MAX_ENV_STEPS' in os.environ else 500 # Force a game end after this many moves, to prevent infinitely looped paths through the search space
-MAX_LINES = 20 # The game is lost immediately once no combination of valid moves can result in a program that is within the line limit, i.e. when the number of lines behind the cursor has reached MAX_LINES + 1
+MAX_LINES = int(os.environ['MAX_LINES']) if 'MAX_LINES' in os.environ else 20 # The game is lost immediately once no combination of valid moves can result in a program that is within the line limit, i.e. when the number of lines behind the cursor has reached MAX_LINES + 1
 MAX_LINE_PENALTY = 0.3 # Penalty per additional line is MAX_LINE_PENALTY / MAX_LINES. This is to motivate concise programs. Should be set low enough to allow exploring the search space.
 
 DEBUG = 'DEBUG' in os.environ and os.environ['DEBUG'].lower() != 'false'
