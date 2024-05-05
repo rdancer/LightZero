@@ -27,10 +27,16 @@ class GameCompleteException(Exception):
     pass
 
 class Game:
-    VALID_INPUTS = ['l', 'h', 'k', 'j', ' ']
+    VALID_INPUTS = [
+        'l',
+        # 'h',
+        'k',
+        'j',
+        ' '
+    ]
     INPUT_KEY_NAMES = {
         'l': "RIGHT",
-        'h': "LEFT",
+        # 'h': "LEFT",
         'k': "UP",
         'j': "DOWN",
         ' ': "SPACE"
