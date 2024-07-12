@@ -1,6 +1,7 @@
 import copy
 from datetime import datetime
 from typing import Union, Optional, Dict
+import os
 
 from game import Game as MartisGame, MAX_LINES
 
@@ -12,12 +13,19 @@ from ding.torch_utils import to_ndarray
 from ding.utils import ENV_REGISTRY
 from easydict import EasyDict
 
+from StringIO import StringIO
+
 
 @ENV_REGISTRY.register('martis_game_lightzero')
 class MartisGameEnv(BaseEnv):
     """
     LightZero version of Marti's Game environment. Based on the classic Cartpole environment. This version uses discretized environment, in particular the decimal constant is entered by repeated presses of the arrow keys, much like one would set the time on a Casio wrist watch.
+
+    Optional visualisation is accessible in the usual way, by setting `render_mode=ansi` when creating the environment. For debugging purposes, if the VISUALIZATION_TTY environment variable is set, the environment will also be rendered to that terminal. See the `render` method for details.
     """
+    metadata = {
+        "render_modes": ["ansi"],
+    }
 
     config = dict(
         # env_id (str): The name of the environment.
@@ -49,8 +57,26 @@ class MartisGameEnv(BaseEnv):
         self._action_space = gym.spaces.Discrete(MartisGame.NUM_ACTIONS)
         self._action_space.seed(0)  # default seed
         self._reward_space = gym.spaces.Box(low=0.0, high=1.0, shape=(1,), dtype=np.float32)
+        
+        # Set up rendering
+        if "render_mode" in cfg and cfg.render_mode is not None:
+            assert cfg.render_mode in self.metadata["render_modes"], f"render_mode {cfg.render_mode} not in {self.metadata['render_modes']}"
+            self.render_mode = cfg.render_mode
 
         self.game = MartisGame()
+
+    def render(self) -> StringIO:
+        """
+        Render the environment. Returns a StringIO object containing the rendered output.
+
+        If the VISUALIZE_PTY environment variable is set, the output is written to that file. This should be either a TTY or a FIFO file. Note that the TTY is opened write-only (no terminfo interrogation is performed).
+        """
+        tty = os.getenv('VISUALIZATION_TTY', None)
+        screen = self.game.render()
+        if tty is not None:
+            with open(tty, 'wb') as f:
+                f.write(screen)
+        return screen
 
     def reset(self) -> Dict[str, np.ndarray]:
         """

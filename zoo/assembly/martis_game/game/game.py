@@ -1,7 +1,9 @@
 import curses
+import pty
 import sys
 import os
 import signal
+from StringIO import StringIO
 
 from statement import Statement, NextStatementException
 from my_evaluator import my_evaluate as evaluate
@@ -24,6 +26,11 @@ class Game:
     VALID_INPUTS = ['l', 'h', 'k', 'j', ' ']
     NUM_ACTIONS = len(VALID_INPUTS)
     EMPTY_PROGRAM = """def Setup():\ndef Predict():\ndef Learn():"""
+
+    ANSI_CLEAR_SCREEN = '\033[2J'
+    ANSI_CURSOR_HOME = '\033[H'
+    ANSI_REVERSE_ON = '\033[7m'  # ANSI escape sequence for reverse display
+    ANSI_REVERSE_OFF = '\033[0m'  # ANSI escape sequence for normal display
 
     def __init__(self, program: str = EMPTY_PROGRAM):
         self.program = program
@@ -103,6 +110,28 @@ class Game:
         with open(sys.argv[1], 'w') as f:
             f.writelines([statement.serialize_for_file() + '\n' for statement in self.lines])
         print(f"Wrote {sys.argv[1]}", file=sys.stderr)
+
+    def render(self) -> StringIO:
+        """
+        This is similar to main(), but in a simplified version, without any input. gym calls it whenever it needs to visualise the game's progress, which should be after every step().
+        
+        We would use a pseudo-tty, but the Python ncurses wrapper does not support newterm(), so that is not actually possible without messing up the current active TTY, so we roll our own (not much to roll, anyway).
+        """
+        output = StringIO()
+        output.write(self.ANSI_CLEAR_SCREEN + self.ANSI_CURSOR_HOME)
+        for i, statement in enumerate(self.lines):
+            line_str = statement.serialize_for_display()
+            if i == self.current_line:
+                cursor_pos = statement.get_cursor_display_column()
+                line_str = (
+                    line_str[:cursor_pos] +
+                    self.ANSI_REVERSE_ON +
+                    line_str[cursor_pos] +
+                    self.ANSI_REVERSE_OFF +
+                    line_str[cursor_pos+1:]
+                )
+            output.write(line_str + '\n')
+        return output
 
     def step(self, action: int): # obs, rew, terminated, truncated, info
         observation, reward, terminated, truncated, info = None, 0, False, False, {}

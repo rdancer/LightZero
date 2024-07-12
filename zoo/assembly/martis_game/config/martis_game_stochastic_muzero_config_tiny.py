@@ -57,6 +57,7 @@ martis_game_stochastic_muzero_config = dict(
         collector_env_num=collector_env_num,
         evaluator_env_num=evaluator_env_num,
     ),
+    render_mode="ansi",
 )
 
 martis_game_stochastic_muzero_config = EasyDict(martis_game_stochastic_muzero_config)
